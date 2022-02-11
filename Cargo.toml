@@ -1,0 +1,13 @@
+[package]
+name = "bagr"
+version = "0.1.0"
+edition = "2021"
+authors = ["Peter Winckles <pwinckles@pm.me>"]
+description = "A CLI for interacting with BagIt bags"
+license = "Apache-2.0"
+readme = "README.md"
+repository = "https://github.com/pwinckles/bagr"
+homepage = "https://github.com/pwinckles/bagr"
+documentation = "https://docs.rs/bagr/"
+
+[dependencies]
