@@ -10,4 +10,23 @@ repository = "https://github.com/pwinckles/bagr"
 homepage = "https://github.com/pwinckles/bagr"
 documentation = "https://docs.rs/bagr/"
 
+[[bin]]
+name = "bagr"
+path = "src/bin/bagr.rs"
+
 [dependencies]
+# Errors
+snafu = "0.7"
+
+# Filesystem
+walkdir = "2"
+
+# CLI
+clap = { version = "3", features = ["derive"] }
+ansi_term = "0.12"
+ctrlc = "3"
+atty = "0.2"
+
+# Logging
+log = "0.4"
+env_logger = "0.9"
