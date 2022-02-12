@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use clap::AppSettings::UseLongFormatForHelpSubcommand;
 use clap::{Args, Parser, Subcommand};
 use log::LevelFilter;
-use bagr::bagit::BagBuilder;
+use bagr::bagit::{create_bag};
 
 // TODO expand docs
 
@@ -69,5 +69,5 @@ fn main() {
     }
 
     // TODO
-    BagBuilder::new(".").build().unwrap();
+    create_bag(".").unwrap();
 }

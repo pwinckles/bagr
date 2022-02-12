@@ -1,4 +1,4 @@
-pub use crate::bagit::bag::{BagBuilder, Bag};
+pub use crate::bagit::bag::{Bag, create_bag};
 
 mod bag;
 mod error;
