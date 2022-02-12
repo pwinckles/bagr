@@ -18,6 +18,9 @@ path = "src/bin/bagr.rs"
 # Errors
 snafu = "0.7"
 
+# Time
+chrono = "0.4"
+
 # Enum features
 strum = "0.23"
 strum_macros = "0.23"

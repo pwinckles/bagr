@@ -1,3 +1,4 @@
+use chrono::Local;
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::fmt::{Display, Formatter};
@@ -14,7 +15,7 @@ use snafu::ResultExt;
 use walkdir::{DirEntry, WalkDir};
 
 use crate::bagit::error::*;
-use crate::bagit::tag::{TagFileWriter, TagList};
+use crate::bagit::tag::{write_tag_file, TagList};
 
 // TODO move?
 pub const BAGIT_1_0: BagItVersion = BagItVersion::new(1, 0);
@@ -26,9 +27,13 @@ pub const BAG_INFO_TXT: &str = "bag-info.txt";
 pub const FETCH_TXT: &str = "fetch.txt";
 pub const DATA: &str = "data";
 
-// Bag declaration tag labels
+// bagit.txt tag labels
 pub const LABEL_BAGIT_VERSION: &str = "BagIt-Version";
 pub const LABEL_FILE_ENCODING: &str = "Tag-File-Character-Encoding";
+
+// bag-info.txt reserved labels
+pub const LABEL_BAGGING_DATE: &str = "Bagging-Date";
+pub const LABEL_PAYLOAD_OXUM: &str = "Payload-Oxum";
 
 #[derive(Debug)]
 pub struct Bag {
@@ -52,6 +57,11 @@ pub struct BagDeclaration {
     // https://crates.io/crates/encoding_rs_io
     // Encoding will always be UTF-8 when creating, but it could be different when reading
     encoding: String,
+}
+
+#[derive(Debug)]
+pub struct BagInfo {
+    tags: TagList,
 }
 
 #[derive(Debug)]
@@ -93,11 +103,14 @@ pub fn create_bag<P: AsRef<Path>>(base_dir: P, algorithms: &[DigestAlgorithm]) -
     write_manifests(algorithms, &file_meta, base_dir)?;
 
     let declaration = BagDeclaration::new();
-    // TODO this probably doesn't need to be an object
-    let tag_writer = TagFileWriter::new();
-    tag_writer.write(&declaration.to_tags(), base_dir.join(BAGIT_TXT))?;
+    write_tag_file(&declaration.to_tags(), base_dir.join(BAGIT_TXT))?;
 
-    // TODO write bag-info.txt
+    let mut bag_info = BagInfo::with_capacity(2);
+    bag_info.add_bagging_date(current_date_str());
+    bag_info.add_payload_oxum(build_payload_oxum(&file_meta));
+
+    write_tag_file(&bag_info.into(), base_dir.join(BAG_INFO_TXT))?;
+
     // TODO calculate tag digests
     // TODO write tag manifests
 
@@ -154,6 +167,53 @@ impl BagDeclaration {
 impl Default for BagDeclaration {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl BagInfo {
+    pub fn new() -> Self {
+        Self {
+            tags: TagList::new(),
+        }
+    }
+
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            tags: TagList::with_capacity(capacity),
+        }
+    }
+
+    pub fn with_tags(tags: TagList) -> Self {
+        Self { tags }
+    }
+
+    pub fn add_bagging_date<S: AsRef<str>>(&mut self, value: S) -> &mut Self {
+        self.tags.add_tag(LABEL_BAGGING_DATE, value);
+        self
+    }
+
+    pub fn add_payload_oxum<S: AsRef<str>>(&mut self, value: S) -> &mut Self {
+        self.tags.remove_tags(LABEL_PAYLOAD_OXUM);
+        self.tags.add_tag(LABEL_PAYLOAD_OXUM, value);
+        self
+    }
+}
+
+impl Default for BagInfo {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl From<TagList> for BagInfo {
+    fn from(tags: TagList) -> Self {
+        BagInfo::with_tags(tags)
+    }
+}
+
+impl From<BagInfo> for TagList {
+    fn from(info: BagInfo) -> Self {
+        info.tags
     }
 }
 
@@ -228,18 +288,11 @@ fn write_manifests<P: AsRef<Path>>(
             let manifest = manifests
                 .get_mut(algorithm)
                 .expect("Missing expected file digest");
-            writeln!(manifest, "{} {}", digest, path).context(IoGeneralSnafu {})?;
+            writeln!(manifest, "{digest} {path}").context(IoGeneralSnafu {})?;
         }
     }
 
     Ok(())
-}
-
-fn epoch_seconds() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("Failed to get system time")
-        .as_secs()
 }
 
 fn rename<F: AsRef<Path>, T: AsRef<Path>>(from: F, to: T) -> Result<()> {
@@ -247,4 +300,24 @@ fn rename<F: AsRef<Path>, T: AsRef<Path>>(from: F, to: T) -> Result<()> {
     let to = to.as_ref();
     info!("Moving {} to {}", from.display(), to.display());
     fs::rename(from, to).context(IoMoveSnafu { from, to })
+}
+
+fn build_payload_oxum(file_meta: &[FileMeta]) -> String {
+    let count = file_meta.len();
+    let mut sum = 0;
+    for meta in file_meta {
+        sum += meta.size_bytes;
+    }
+    format!("{sum}.{count}")
+}
+
+fn current_date_str() -> String {
+    Local::today().format("%Y-%m-%d").to_string()
+}
+
+fn epoch_seconds() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("Failed to get system time")
+        .as_secs()
 }

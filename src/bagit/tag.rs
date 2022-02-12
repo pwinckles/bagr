@@ -1,3 +1,4 @@
+use log::info;
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::Path;
@@ -19,10 +20,20 @@ pub struct TagList {
     tags: Vec<Tag>,
 }
 
-// TODO reader and writer separate?
-pub struct TagFileWriter {
-    // TODO base_dir?
-// TODO encoding?
+pub fn write_tag_file<P: AsRef<Path>>(tags: &TagList, destination: P) -> Result<()> {
+    let destination = destination.as_ref();
+    info!("Writing tag file {}", destination.display());
+
+    let mut writer =
+        BufWriter::new(File::create(destination).context(IoCreateSnafu { path: destination })?);
+
+    for tag in tags {
+        // TODO temp
+        writeln!(writer, "{}: {}", tag.label, tag.value)
+            .context(IoWriteSnafu { path: destination })?;
+    }
+
+    Ok(())
 }
 
 impl Tag {
@@ -50,11 +61,16 @@ impl TagList {
     pub fn add_tag<L: AsRef<str>, V: AsRef<str>>(&mut self, label: L, value: V) {
         self.tags.push(Tag::new(label, value));
     }
+
+    pub fn remove_tags<S: AsRef<str>>(&mut self, label: S) {
+        let label = label.as_ref();
+        self.tags.retain(|e| e.label != label);
+    }
 }
 
 impl Default for TagList {
     fn default() -> Self {
-        TagList::new()
+        Self::new()
     }
 }
 
@@ -73,30 +89,5 @@ impl<'a> IntoIterator for &'a TagList {
 
     fn into_iter(self) -> Self::IntoIter {
         self.tags.iter()
-    }
-}
-
-impl TagFileWriter {
-    pub fn new() -> Self {
-        Self {}
-    }
-
-    // TODO is this the right data structure?
-    pub fn write<P: AsRef<Path>>(&self, tags: &TagList, destination: P) -> Result<()> {
-        // TODO info log
-        let mut writer = BufWriter::new(File::create(&destination).context(IoCreateSnafu {
-            path: destination.as_ref().to_path_buf(),
-        })?);
-
-        for tag in tags {
-            // TODO temp
-            writeln!(writer, "{}: {}", tag.label, tag.value).context(IoWriteSnafu {
-                path: destination.as_ref().to_path_buf(),
-            })?;
-        }
-
-        // TODO should there be a blank line at the end of this file?
-
-        Ok(())
     }
 }
