@@ -1,9 +1,10 @@
 use std::path::PathBuf;
+use std::process::exit;
 
 use bagr::bagit::{create_bag, DigestAlgorithm};
 use clap::AppSettings::UseLongFormatForHelpSubcommand;
 use clap::{Args, Parser, Subcommand};
-use log::LevelFilter;
+use log::{error, LevelFilter};
 
 // TODO expand docs
 
@@ -71,5 +72,8 @@ fn main() {
     let algorithms = &[DigestAlgorithm::Md5, DigestAlgorithm::Sha256];
 
     // TODO
-    create_bag(".", algorithms).unwrap();
+    if let Err(e) = create_bag(".", algorithms) {
+        error!("Failed to create bag: {}", e);
+        exit(1);
+    }
 }

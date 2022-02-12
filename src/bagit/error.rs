@@ -34,6 +34,13 @@ pub enum Error {
         from: PathBuf,
         to: PathBuf,
     },
+    #[snafu(display("Failed to delete {}: {}", path.display(), source))]
+    IoDelete {
+        source: std::io::Error,
+        path: PathBuf,
+    },
     #[snafu(display("Error walking files: {}", source))]
     WalkFile { source: walkdir::Error },
+    #[snafu(display("Encountered an unsupported file type at {}", path.display()))]
+    UnsupportedFile { path: PathBuf },
 }

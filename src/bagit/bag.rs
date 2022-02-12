@@ -3,8 +3,8 @@ use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::fmt::{Display, Formatter};
 use std::fs::File;
-use std::io::BufWriter;
 use std::io::Write;
+use std::io::{BufWriter, ErrorKind};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::{fs, io};
@@ -16,6 +16,7 @@ use walkdir::{DirEntry, WalkDir};
 
 use crate::bagit::error::*;
 use crate::bagit::tag::{write_tag_file, TagList};
+use crate::bagit::Error::{IoDelete, UnsupportedFile};
 
 // TODO move?
 pub const BAGIT_1_0: BagItVersion = BagItVersion::new(1, 0);
@@ -83,29 +84,18 @@ pub fn create_bag<P: AsRef<Path>>(base_dir: P, algorithms: &[DigestAlgorithm]) -
 
     fs::create_dir(&temp_dir).context(IoCreateSnafu { path: &temp_dir })?;
 
-    let base_files = fs::read_dir(base_dir).context(IoReadDirSnafu { path: base_dir })?;
+    let mut payload_meta = move_into_dir(&base_dir, &temp_dir, algorithms, |f| {
+        f.file_name() != temp_name.as_str()
+    })?;
 
-    for file in base_files {
-        let file = file.context(IoGeneralSnafu {})?;
-        let file_name = file.file_name();
-
-        if <String as AsRef<OsStr>>::as_ref(&temp_name) != file_name {
-            // TODO this is not correct because it will move symlinks
-            //      need to walk the files, move only files, and delete the rest
-            //      calculating digests at this time would make sense so we only walk once
-            rename(file.path(), temp_dir.join(file_name))?;
-        }
-    }
-
-    let data_dir = base_dir.join(DATA);
-    rename(temp_dir, &data_dir)?;
-
-    let mut payload_meta = calculate_digests(&data_dir, algorithms, |_| true)?;
     let relative_data_dir = PathBuf::from(DATA);
 
     for meta in &mut payload_meta {
         meta.path = relative_data_dir.join(&meta.path);
     }
+
+    let data_dir = base_dir.join(DATA);
+    rename(temp_dir, &data_dir)?;
 
     write_manifests(algorithms, &payload_meta, PAYLOAD_MANIFEST_PREFIX, base_dir)?;
 
@@ -123,6 +113,7 @@ pub fn create_bag<P: AsRef<Path>>(base_dir: P, algorithms: &[DigestAlgorithm]) -
         f.file_name() != DATA
             && f.file_name()
                 .to_str()
+                // TODO this would be better as a regex match
                 .map(|n| !n.starts_with(TAG_MANIFEST_PREFIX))
                 .unwrap_or(true)
     })?;
@@ -232,6 +223,78 @@ impl From<BagInfo> for TagList {
     }
 }
 
+/// Moves the contents of the `src_dir` into the `dst_dir` and returns meta about all of the
+/// moved files.
+fn move_into_dir<S, D, P>(
+    src_dir: S,
+    dst_dir: D,
+    algorithms: &[DigestAlgorithm],
+    predicate: P,
+) -> Result<Vec<FileMeta>>
+where
+    S: AsRef<Path>,
+    D: AsRef<Path>,
+    P: FnMut(&DirEntry) -> bool,
+{
+    let src_dir = src_dir.as_ref();
+    let dst_dir = dst_dir.as_ref();
+
+    let mut file_meta = Vec::new();
+    let mut dirs = Vec::new();
+
+    for file in WalkDir::new(src_dir).into_iter().filter_entry(predicate) {
+        let file = file.context(WalkFileSnafu {})?;
+
+        if file.file_type().is_file() {
+            let metadata = file.metadata().context(WalkFileSnafu {})?;
+
+            info!("Calculating digests for {}", file.path().display());
+
+            let mut writer = MultiDigestWriter::new(algorithms, std::io::sink());
+            let mut reader = File::open(file.path()).context(IoReadSnafu { path: file.path() })?;
+
+            io::copy(&mut reader, &mut writer).context(IoReadSnafu { path: file.path() })?;
+
+            file_meta.push(FileMeta {
+                path: file.path().strip_prefix(src_dir).unwrap().to_path_buf(),
+                size_bytes: metadata.len(),
+                digests: writer.finalize_hex(),
+            });
+
+            let relative = file.path().strip_prefix(src_dir).unwrap();
+            let file_dst = dst_dir.join(relative);
+
+            fs::create_dir_all(file_dst.parent().unwrap())
+                .context(IoCreateSnafu { path: &file_dst })?;
+            rename(file.path(), file_dst)?;
+        } else if file.file_type().is_dir() {
+            dirs.push(file.path().to_path_buf());
+        } else {
+            return Err(UnsupportedFile {
+                path: file.path().to_path_buf(),
+            });
+        }
+    }
+
+    // Delete any dangling directories left after moving out all of the files
+    for dir in dirs {
+        if dir == src_dir {
+            continue;
+        }
+        if let Err(e) = fs::remove_dir_all(&dir) {
+            if e.kind() != ErrorKind::NotFound {
+                return Err(IoDelete {
+                    path: dir,
+                    source: e,
+                });
+            }
+        }
+    }
+
+    Ok(file_meta)
+}
+
+/// Calculates the digests for all of the files under the `base_dir`
 fn calculate_digests<D, P>(
     base_dir: D,
     algorithms: &[DigestAlgorithm],
@@ -248,7 +311,6 @@ where
         let file = file.context(WalkFileSnafu {})?;
 
         if file.file_type().is_file() {
-            // TODO there's a question if we need this here
             let metadata = file.metadata().context(WalkFileSnafu {})?;
 
             info!("Calculating digests for {}", file.path().display());
@@ -262,7 +324,7 @@ where
                 path: file.path().strip_prefix(base_dir).unwrap().to_path_buf(),
                 size_bytes: metadata.len(),
                 digests: writer.finalize_hex(),
-            })
+            });
         }
     }
 
@@ -288,6 +350,7 @@ fn write_manifests<P: AsRef<Path>>(
 
     for meta in file_meta {
         // TODO LF and CR must be % encoded
+        // TODO on windows, `\` must be converted to `/`
         let path = meta.path.display();
         for algorithm in algorithms {
             let digest = meta
