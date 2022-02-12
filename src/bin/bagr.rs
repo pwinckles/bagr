@@ -1,10 +1,10 @@
 use std::path::PathBuf;
 use std::process::exit;
 
-use bagr::bagit::{create_bag, DigestAlgorithm};
+use bagr::bagit::{create_bag, open_bag, DigestAlgorithm};
 use clap::AppSettings::UseLongFormatForHelpSubcommand;
 use clap::{Args, Parser, Subcommand};
-use log::{error, LevelFilter};
+use log::{error, info, LevelFilter};
 
 // TODO expand docs
 
@@ -40,11 +40,17 @@ pub struct BagrArgs {
 pub enum Command {
     #[clap(name = "bag")]
     Bag(BagCmd),
+    #[clap(name = "rebag")]
+    Rebag(RebagCmd),
 }
 
 /// Create a new bag
 #[derive(Args, Debug)]
 pub struct BagCmd {}
+
+/// Update BagIt manifests to match the current state on disk
+#[derive(Args, Debug)]
+pub struct RebagCmd {}
 
 fn main() {
     let mut args = BagrArgs::parse();
@@ -69,11 +75,24 @@ fn main() {
         args.no_styles = true;
     }
 
-    let algorithms = &[DigestAlgorithm::Md5, DigestAlgorithm::Sha256];
-
     // TODO
-    if let Err(e) = create_bag(".", algorithms) {
-        error!("Failed to create bag: {}", e);
-        exit(1);
+    match args.command {
+        Command::Bag(_) => {
+            let algorithms = &[DigestAlgorithm::Md5, DigestAlgorithm::Sha256];
+
+            if let Err(e) = create_bag(".", algorithms) {
+                error!("Failed to create bag: {}", e);
+                exit(1);
+            }
+        }
+        Command::Rebag(_) => match open_bag(".") {
+            Ok(bag) => {
+                info!("Opened bag: {:?}", bag);
+            }
+            Err(e) => {
+                error!("Failed to rebag: {}", e);
+                exit(1);
+            }
+        },
     }
 }

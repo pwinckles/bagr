@@ -1,3 +1,4 @@
+use crate::bagit::bag::BagItVersion;
 use snafu::prelude::*;
 use std::path::PathBuf;
 
@@ -43,4 +44,14 @@ pub enum Error {
     WalkFile { source: walkdir::Error },
     #[snafu(display("Encountered an unsupported file type at {}", path.display()))]
     UnsupportedFile { path: PathBuf },
+    #[snafu(display("Invalid tag line, {details}: {line}"))]
+    InvalidTagLine { line: String, details: String },
+    #[snafu(display("Invalid BagIt version: {value}"))]
+    InvalidBagItVersion { value: String },
+    #[snafu(display("Missing required tag {tag}"))]
+    MissingTag { tag: String },
+    #[snafu(display("Unsupported BagIt version {version}"))]
+    UnsupportedVersion { version: BagItVersion },
+    #[snafu(display("Unsupported file encoding {encoding}"))]
+    UnsupportedEncoding { encoding: String },
 }

@@ -1,6 +1,5 @@
 use chrono::Local;
 use std::collections::HashMap;
-use std::ffi::OsStr;
 use std::fmt::{Display, Formatter};
 use std::fs::File;
 use std::io::Write;
@@ -14,29 +13,10 @@ use log::info;
 use snafu::ResultExt;
 use walkdir::{DirEntry, WalkDir};
 
+use crate::bagit::consts::*;
+use crate::bagit::error::Error::*;
 use crate::bagit::error::*;
-use crate::bagit::tag::{write_tag_file, TagList};
-use crate::bagit::Error::{IoDelete, UnsupportedFile};
-
-// TODO move?
-pub const BAGIT_1_0: BagItVersion = BagItVersion::new(1, 0);
-pub const BAGIT_DEFAULT_VERSION: BagItVersion = BAGIT_1_0;
-
-// Filenames
-pub const BAGIT_TXT: &str = "bagit.txt";
-pub const BAG_INFO_TXT: &str = "bag-info.txt";
-pub const FETCH_TXT: &str = "fetch.txt";
-pub const DATA: &str = "data";
-pub const PAYLOAD_MANIFEST_PREFIX: &str = "manifest";
-pub const TAG_MANIFEST_PREFIX: &str = "tagmanifest";
-
-// bagit.txt tag labels
-pub const LABEL_BAGIT_VERSION: &str = "BagIt-Version";
-pub const LABEL_FILE_ENCODING: &str = "Tag-File-Character-Encoding";
-
-// bag-info.txt reserved labels
-pub const LABEL_BAGGING_DATE: &str = "Bagging-Date";
-pub const LABEL_PAYLOAD_OXUM: &str = "Payload-Oxum";
+use crate::bagit::tag::{read_bag_declaration, write_tag_file, BagDeclaration, BagInfo};
 
 #[derive(Debug)]
 pub struct Bag {
@@ -46,25 +26,10 @@ pub struct Bag {
 
 // TODO need to string
 // TODO need comparator
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub struct BagItVersion {
     major: u8,
     minor: u8,
-}
-
-#[derive(Debug)]
-pub struct BagDeclaration {
-    version: BagItVersion,
-    // TODO figure out how to handle non-utf-8 encodings
-    // https://crates.io/crates/encoding_rs
-    // https://crates.io/crates/encoding_rs_io
-    // Encoding will always be UTF-8 when creating, but it could be different when reading
-    encoding: String,
-}
-
-#[derive(Debug)]
-pub struct BagInfo {
-    tags: TagList,
 }
 
 #[derive(Debug)]
@@ -74,10 +39,21 @@ struct FileMeta {
     digests: HashMap<DigestAlgorithm, HexDigest>,
 }
 
+/// Creates a new bag in place by moving the contents of `base_dir` into the bag's payload and
+/// then writing all of the necessary tag files and manifests. The end result is that the `base_dir`
+/// contains a fully formed bag.
+///
+/// The `algorithms` are the algorithms that are used when calculating file digests. If none are
+/// provided, then `sha512` is used.
 pub fn create_bag<P: AsRef<Path>>(base_dir: P, algorithms: &[DigestAlgorithm]) -> Result<Bag> {
     // TODO ctrl+c wiring
 
     let base_dir = base_dir.as_ref();
+    let algorithms = if algorithms.is_empty() {
+        &[DigestAlgorithm::Sha512]
+    } else {
+        algorithms
+    };
 
     let temp_name = format!("temp-{}", epoch_seconds());
     let temp_dir = base_dir.join(&temp_name);
@@ -123,6 +99,14 @@ pub fn create_bag<P: AsRef<Path>>(base_dir: P, algorithms: &[DigestAlgorithm]) -
     Ok(Bag::new(base_dir, declaration))
 }
 
+// TODO docs
+pub fn open_bag<P: AsRef<Path>>(base_dir: P) -> Result<Bag> {
+    let base_dir = base_dir.as_ref();
+    info!("Opening bag at {}", base_dir.display());
+    let declaration = read_bag_declaration(base_dir)?;
+    Ok(Bag::new(base_dir, declaration))
+}
+
 impl Bag {
     pub fn new<P: AsRef<Path>>(base_dir: P, declaration: BagDeclaration) -> Self {
         Self {
@@ -144,82 +128,31 @@ impl Display for BagItVersion {
     }
 }
 
-impl BagDeclaration {
-    pub fn new() -> Self {
-        Self {
-            version: BAGIT_DEFAULT_VERSION,
-            // TODO encoding
-            encoding: "UTF-8".into(),
+impl TryFrom<String> for BagItVersion {
+    type Error = Error;
+
+    fn try_from(value: String) -> std::result::Result<Self, Self::Error> {
+        TryFrom::try_from(&value)
+    }
+}
+
+impl TryFrom<&String> for BagItVersion {
+    type Error = Error;
+
+    fn try_from(value: &String) -> std::result::Result<Self, Self::Error> {
+        if let Some((major, minor)) = value.split_once('.') {
+            let major = major.parse::<u8>().map_err(|_| InvalidBagItVersion {
+                value: value.into(),
+            })?;
+            let minor = minor.parse::<u8>().map_err(|_| InvalidBagItVersion {
+                value: value.into(),
+            })?;
+            Ok(BagItVersion::new(major, minor))
+        } else {
+            Err(InvalidBagItVersion {
+                value: value.into(),
+            })
         }
-    }
-
-    pub fn with_values<S: AsRef<str>>(version: BagItVersion, encoding: S) -> Self {
-        Self {
-            version,
-            encoding: encoding.as_ref().into(),
-        }
-    }
-
-    pub fn to_tags(&self) -> TagList {
-        let mut tags = TagList::with_capacity(2);
-        tags.add_tag(LABEL_BAGIT_VERSION, self.version.to_string());
-        tags.add_tag(LABEL_FILE_ENCODING, &self.encoding);
-        tags
-    }
-}
-
-impl Default for BagDeclaration {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-// TODO From<> for TagList -> BagDeclaration
-
-impl BagInfo {
-    pub fn new() -> Self {
-        Self {
-            tags: TagList::new(),
-        }
-    }
-
-    pub fn with_capacity(capacity: usize) -> Self {
-        Self {
-            tags: TagList::with_capacity(capacity),
-        }
-    }
-
-    pub fn with_tags(tags: TagList) -> Self {
-        Self { tags }
-    }
-
-    pub fn add_bagging_date<S: AsRef<str>>(&mut self, value: S) -> &mut Self {
-        self.tags.add_tag(LABEL_BAGGING_DATE, value);
-        self
-    }
-
-    pub fn add_payload_oxum<S: AsRef<str>>(&mut self, value: S) -> &mut Self {
-        self.tags.remove_tags(LABEL_PAYLOAD_OXUM);
-        self.tags.add_tag(LABEL_PAYLOAD_OXUM, value);
-        self
-    }
-}
-
-impl Default for BagInfo {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl From<TagList> for BagInfo {
-    fn from(tags: TagList) -> Self {
-        BagInfo::with_tags(tags)
-    }
-}
-
-impl From<BagInfo> for TagList {
-    fn from(info: BagInfo) -> Self {
-        info.tags
     }
 }
 
