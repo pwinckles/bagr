@@ -18,8 +18,20 @@ path = "src/bin/bagr.rs"
 # Errors
 snafu = "0.7"
 
+# Enum features
+strum = "0.23"
+strum_macros = "0.23"
+
 # Filesystem
 walkdir = "2"
+
+# Digests
+digest = "0.10"
+blake2 = "0.10"
+hex = "0.4"
+md-5 = "0.10"
+sha-1 = "0.10"
+sha2 = "0.10"
 
 # CLI
 clap = { version = "3", features = ["derive"] }

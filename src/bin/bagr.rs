@@ -1,9 +1,9 @@
 use std::path::PathBuf;
 
+use bagr::bagit::create_bag;
 use clap::AppSettings::UseLongFormatForHelpSubcommand;
 use clap::{Args, Parser, Subcommand};
 use log::LevelFilter;
-use bagr::bagit::{create_bag};
 
 // TODO expand docs
 

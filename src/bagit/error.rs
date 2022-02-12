@@ -1,5 +1,5 @@
-use std::path::PathBuf;
 use snafu::prelude::*;
+use std::path::PathBuf;
 
 pub type Result<T, E = Error> = core::result::Result<T, E>;
 
@@ -7,9 +7,7 @@ pub type Result<T, E = Error> = core::result::Result<T, E>;
 #[snafu(visibility(pub))]
 pub enum Error {
     #[snafu(display("IO error: {}", source))]
-    IoGeneral {
-        source: std::io::Error,
-    },
+    IoGeneral { source: std::io::Error },
     #[snafu(display("Error creating file {}: {}", path.display(), source))]
     IoCreate {
         source: std::io::Error,
@@ -17,6 +15,11 @@ pub enum Error {
     },
     #[snafu(display("Error writing to file {}: {}", path.display(), source))]
     IoWrite {
+        source: std::io::Error,
+        path: PathBuf,
+    },
+    #[snafu(display("Error reading file {}: {}", path.display(), source))]
+    IoRead {
         source: std::io::Error,
         path: PathBuf,
     },
@@ -31,4 +34,6 @@ pub enum Error {
         from: PathBuf,
         to: PathBuf,
     },
+    #[snafu(display("Error walking files: {}", source))]
+    WalkFile { source: walkdir::Error },
 }

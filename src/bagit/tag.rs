@@ -22,7 +22,7 @@ pub struct TagList {
 // TODO reader and writer separate?
 pub struct TagFileWriter {
     // TODO base_dir?
-    // TODO encoding?
+// TODO encoding?
 }
 
 impl Tag {
@@ -38,9 +38,7 @@ impl Tag {
 
 impl TagList {
     pub fn new() -> Self {
-        Self {
-            tags: Vec::new(),
-        }
+        Self { tags: Vec::new() }
     }
 
     pub fn with_capacity(capacity: usize) -> Self {
@@ -101,5 +99,4 @@ impl TagFileWriter {
 
         Ok(())
     }
-
 }
