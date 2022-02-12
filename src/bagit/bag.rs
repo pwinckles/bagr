@@ -26,6 +26,8 @@ pub const BAGIT_TXT: &str = "bagit.txt";
 pub const BAG_INFO_TXT: &str = "bag-info.txt";
 pub const FETCH_TXT: &str = "fetch.txt";
 pub const DATA: &str = "data";
+pub const PAYLOAD_MANIFEST_PREFIX: &str = "manifest";
+pub const TAG_MANIFEST_PREFIX: &str = "tagmanifest";
 
 // bagit.txt tag labels
 pub const LABEL_BAGIT_VERSION: &str = "BagIt-Version";
@@ -98,21 +100,34 @@ pub fn create_bag<P: AsRef<Path>>(base_dir: P, algorithms: &[DigestAlgorithm]) -
     let data_dir = base_dir.join(DATA);
     rename(temp_dir, &data_dir)?;
 
-    let file_meta = calculate_digests(&data_dir, algorithms, |_| true)?;
+    let mut payload_meta = calculate_digests(&data_dir, algorithms, |_| true)?;
+    let relative_data_dir = PathBuf::from(DATA);
 
-    write_manifests(algorithms, &file_meta, base_dir)?;
+    for meta in &mut payload_meta {
+        meta.path = relative_data_dir.join(&meta.path);
+    }
+
+    write_manifests(algorithms, &payload_meta, PAYLOAD_MANIFEST_PREFIX, base_dir)?;
 
     let declaration = BagDeclaration::new();
     write_tag_file(&declaration.to_tags(), base_dir.join(BAGIT_TXT))?;
 
     let mut bag_info = BagInfo::with_capacity(2);
     bag_info.add_bagging_date(current_date_str());
-    bag_info.add_payload_oxum(build_payload_oxum(&file_meta));
+    bag_info.add_payload_oxum(build_payload_oxum(&payload_meta));
 
     write_tag_file(&bag_info.into(), base_dir.join(BAG_INFO_TXT))?;
 
-    // TODO calculate tag digests
-    // TODO write tag manifests
+    let tag_meta = calculate_digests(base_dir, algorithms, |f| {
+        // Skip the data directory and all tag manifests
+        f.file_name() != DATA
+            && f.file_name()
+                .to_str()
+                .map(|n| !n.starts_with(TAG_MANIFEST_PREFIX))
+                .unwrap_or(true)
+    })?;
+
+    write_manifests(algorithms, &tag_meta, TAG_MANIFEST_PREFIX, base_dir)?;
 
     Ok(Bag::new(base_dir, declaration))
 }
@@ -138,8 +153,6 @@ impl Display for BagItVersion {
     }
 }
 
-// TODO add method for creating from tag array
-// TODO add method for converting to a tag array
 impl BagDeclaration {
     pub fn new() -> Self {
         Self {
@@ -169,6 +182,8 @@ impl Default for BagDeclaration {
         Self::new()
     }
 }
+
+// TODO From<> for TagList -> BagDeclaration
 
 impl BagInfo {
     pub fn new() -> Self {
@@ -227,9 +242,6 @@ where
     P: FnMut(&DirEntry) -> bool,
 {
     let base_dir = base_dir.as_ref();
-    // TODO this is NOT the correct relative directory when calculating tag digests
-    let relative_root = base_dir.parent().unwrap();
-
     let mut file_meta = Vec::new();
 
     for file in WalkDir::new(base_dir).into_iter().filter_entry(predicate) {
@@ -247,11 +259,7 @@ where
             io::copy(&mut reader, &mut writer).context(IoReadSnafu { path: file.path() })?;
 
             file_meta.push(FileMeta {
-                path: file
-                    .path()
-                    .strip_prefix(relative_root)
-                    .unwrap()
-                    .to_path_buf(),
+                path: file.path().strip_prefix(base_dir).unwrap().to_path_buf(),
                 size_bytes: metadata.len(),
                 digests: writer.finalize_hex(),
             })
@@ -264,6 +272,7 @@ where
 fn write_manifests<P: AsRef<Path>>(
     algorithms: &[DigestAlgorithm],
     file_meta: &[FileMeta],
+    prefix: &str,
     base_dir: P,
 ) -> Result<()> {
     let base_dir = base_dir.as_ref();
@@ -271,8 +280,8 @@ fn write_manifests<P: AsRef<Path>>(
     let mut manifests = HashMap::with_capacity(algorithms.len());
 
     for algorithm in algorithms {
-        // TODO this does not work for tag manifests
-        let manifest = base_dir.join(format!("manifest-{algorithm}.txt"));
+        let manifest = base_dir.join(format!("{prefix}-{algorithm}.txt"));
+        info!("Writing manifest {}", manifest.display());
         let file = File::create(&manifest).context(IoCreateSnafu { path: manifest })?;
         manifests.insert(algorithm, BufWriter::new(file));
     }
