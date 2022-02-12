@@ -2,6 +2,8 @@ use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::fmt::{Display, Formatter};
 use std::fs::File;
+use std::io::BufWriter;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::{fs, io};
@@ -59,7 +61,7 @@ struct FileMeta {
     digests: HashMap<DigestAlgorithm, HexDigest>,
 }
 
-pub fn create_bag<P: AsRef<Path>>(base_dir: P) -> Result<Bag> {
+pub fn create_bag<P: AsRef<Path>>(base_dir: P, algorithms: &[DigestAlgorithm]) -> Result<Bag> {
     // TODO ctrl+c wiring
 
     let base_dir = base_dir.as_ref();
@@ -86,22 +88,15 @@ pub fn create_bag<P: AsRef<Path>>(base_dir: P) -> Result<Bag> {
     let data_dir = base_dir.join(DATA);
     rename(temp_dir, &data_dir)?;
 
-    let file_meta = calculate_digests(
-        &data_dir,
-        &[DigestAlgorithm::Md5, DigestAlgorithm::Sha256],
-        |_| true,
-    )?;
+    let file_meta = calculate_digests(&data_dir, algorithms, |_| true)?;
 
-    println!("File meta: {:?}", file_meta);
+    write_manifests(algorithms, &file_meta, base_dir)?;
 
     let declaration = BagDeclaration::new();
-    // TODO move
+    // TODO this probably doesn't need to be an object
     let tag_writer = TagFileWriter::new();
     tag_writer.write(&declaration.to_tags(), base_dir.join(BAGIT_TXT))?;
 
-    // TODO calculate digests
-    // TODO write payload manifests
-    // TODO write bagit.txt
     // TODO write bag-info.txt
     // TODO calculate tag digests
     // TODO write tag manifests
@@ -204,6 +199,40 @@ where
     }
 
     Ok(file_meta)
+}
+
+fn write_manifests<P: AsRef<Path>>(
+    algorithms: &[DigestAlgorithm],
+    file_meta: &[FileMeta],
+    base_dir: P,
+) -> Result<()> {
+    let base_dir = base_dir.as_ref();
+
+    let mut manifests = HashMap::with_capacity(algorithms.len());
+
+    for algorithm in algorithms {
+        // TODO this does not work for tag manifests
+        let manifest = base_dir.join(format!("manifest-{algorithm}.txt"));
+        let file = File::create(&manifest).context(IoCreateSnafu { path: manifest })?;
+        manifests.insert(algorithm, BufWriter::new(file));
+    }
+
+    for meta in file_meta {
+        // TODO LF and CR must be % encoded
+        let path = meta.path.display();
+        for algorithm in algorithms {
+            let digest = meta
+                .digests
+                .get(algorithm)
+                .expect("Missing expected file digest");
+            let manifest = manifests
+                .get_mut(algorithm)
+                .expect("Missing expected file digest");
+            writeln!(manifest, "{} {}", digest, path).context(IoGeneralSnafu {})?;
+        }
+    }
+
+    Ok(())
 }
 
 fn epoch_seconds() -> u64 {

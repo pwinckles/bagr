@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use bagr::bagit::create_bag;
+use bagr::bagit::{create_bag, DigestAlgorithm};
 use clap::AppSettings::UseLongFormatForHelpSubcommand;
 use clap::{Args, Parser, Subcommand};
 use log::LevelFilter;
@@ -68,6 +68,8 @@ fn main() {
         args.no_styles = true;
     }
 
+    let algorithms = &[DigestAlgorithm::Md5, DigestAlgorithm::Sha256];
+
     // TODO
-    create_bag(".").unwrap();
+    create_bag(".", algorithms).unwrap();
 }
