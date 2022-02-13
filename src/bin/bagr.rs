@@ -88,6 +88,11 @@ fn main() {
         Command::Rebag(_) => match open_bag(".") {
             Ok(bag) => {
                 info!("Opened bag: {:?}", bag);
+
+                if let Err(e) = bag.update().finalize() {
+                    error!("Failed to rebag: {}", e);
+                    exit(1);
+                }
             }
             Err(e) => {
                 error!("Failed to rebag: {}", e);

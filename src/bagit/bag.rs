@@ -9,27 +9,37 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use std::{fs, io};
 
 use crate::bagit::digest::{DigestAlgorithm, HexDigest, MultiDigestWriter};
-use log::info;
+use log::{error, info, warn};
+use regex::{Captures, Regex};
 use snafu::ResultExt;
 use walkdir::{DirEntry, WalkDir};
 
 use crate::bagit::consts::*;
 use crate::bagit::error::Error::*;
 use crate::bagit::error::*;
-use crate::bagit::tag::{read_bag_declaration, write_tag_file, BagDeclaration, BagInfo};
+use crate::bagit::tag::{
+    read_bag_declaration, read_bag_info, write_bag_declaration, write_bag_info, BagDeclaration,
+    BagInfo,
+};
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub struct BagItVersion {
+    major: u8,
+    minor: u8,
+}
 
 #[derive(Debug)]
 pub struct Bag {
     base_dir: PathBuf,
     declaration: BagDeclaration,
+    bag_info: BagInfo,
+    algorithms: Vec<DigestAlgorithm>,
 }
 
-// TODO need to string
-// TODO need comparator
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub struct BagItVersion {
-    major: u8,
-    minor: u8,
+#[derive(Debug)]
+pub struct BagUpdater {
+    bag: Bag,
+    recalculate_payload_manifests: bool,
 }
 
 #[derive(Debug)]
@@ -38,6 +48,11 @@ struct FileMeta {
     size_bytes: u64,
     digests: HashMap<DigestAlgorithm, HexDigest>,
 }
+
+// TODO investigate BagIt Profiles
+// TODO note, when validating only unicode normalize if a file is not found
+// TODO support 0.97
+// TODO command for upgrading from 0.97 to 1.0?
 
 /// Creates a new bag in place by moving the contents of `base_dir` into the bag's payload and
 /// then writing all of the necessary tag files and manifests. The end result is that the `base_dir`
@@ -64,56 +79,40 @@ pub fn create_bag<P: AsRef<Path>>(base_dir: P, algorithms: &[DigestAlgorithm]) -
         f.file_name() != temp_name.as_str()
     })?;
 
-    let relative_data_dir = PathBuf::from(DATA);
-
-    for meta in &mut payload_meta {
-        meta.path = relative_data_dir.join(&meta.path);
-    }
-
     let data_dir = base_dir.join(DATA);
     rename(temp_dir, &data_dir)?;
 
-    write_manifests(algorithms, &payload_meta, PAYLOAD_MANIFEST_PREFIX, base_dir)?;
+    add_data_prefix(&mut payload_meta);
+    write_payload_manifests(algorithms, &payload_meta, base_dir)?;
 
     let declaration = BagDeclaration::new();
-    write_tag_file(&declaration.to_tags(), base_dir.join(BAGIT_TXT))?;
+    write_bag_declaration(&declaration, base_dir)?;
 
-    let mut bag_info = BagInfo::with_capacity(2);
-    bag_info.add_bagging_date(current_date_str());
-    bag_info.add_payload_oxum(build_payload_oxum(&payload_meta));
+    let bag_info = BagInfo::with_generated(current_date_str(), build_payload_oxum(&payload_meta));
 
-    write_tag_file(&bag_info.into(), base_dir.join(BAG_INFO_TXT))?;
+    write_bag_info(&bag_info, base_dir)?;
 
-    let tag_meta = calculate_digests(base_dir, algorithms, |f| {
-        // Skip the data directory and all tag manifests
-        f.file_name() != DATA
-            && f.file_name()
-                .to_str()
-                // TODO this would be better as a regex match
-                .map(|n| !n.starts_with(TAG_MANIFEST_PREFIX))
-                .unwrap_or(true)
-    })?;
+    update_tag_manifests(base_dir, algorithms)?;
 
-    write_manifests(algorithms, &tag_meta, TAG_MANIFEST_PREFIX, base_dir)?;
-
-    Ok(Bag::new(base_dir, declaration))
+    Ok(Bag::new(
+        base_dir,
+        declaration,
+        bag_info,
+        algorithms.to_vec(),
+    ))
 }
 
 // TODO docs
 pub fn open_bag<P: AsRef<Path>>(base_dir: P) -> Result<Bag> {
     let base_dir = base_dir.as_ref();
     info!("Opening bag at {}", base_dir.display());
-    let declaration = read_bag_declaration(base_dir)?;
-    Ok(Bag::new(base_dir, declaration))
-}
 
-impl Bag {
-    pub fn new<P: AsRef<Path>>(base_dir: P, declaration: BagDeclaration) -> Self {
-        Self {
-            base_dir: base_dir.as_ref().into(),
-            declaration,
-        }
-    }
+    let declaration = read_bag_declaration(base_dir)?;
+    let algorithms = detect_digest_algorithms(base_dir)?;
+
+    let bag_info = read_bag_info(base_dir)?;
+
+    Ok(Bag::new(base_dir, declaration, bag_info, algorithms))
 }
 
 impl BagItVersion {
@@ -153,6 +152,75 @@ impl TryFrom<&String> for BagItVersion {
                 value: value.into(),
             })
         }
+    }
+}
+
+impl Bag {
+    pub fn new<P: AsRef<Path>>(
+        base_dir: P,
+        declaration: BagDeclaration,
+        bag_info: BagInfo,
+        algorithms: Vec<DigestAlgorithm>,
+    ) -> Self {
+        Self {
+            base_dir: base_dir.as_ref().into(),
+            declaration,
+            bag_info,
+            algorithms,
+        }
+    }
+
+    // TODO get tags
+    // TODO get fetch entries
+    // TODO download fetch entries
+
+    /// Creates a `BagUpdater` that's used to update an existing bag
+    pub fn update(self) -> BagUpdater {
+        BagUpdater::new(self)
+    }
+}
+
+impl BagUpdater {
+    pub fn new(bag: Bag) -> Self {
+        Self {
+            bag,
+            recalculate_payload_manifests: true,
+        }
+    }
+
+    // TODO add algorithm
+    // TODO modify tags
+    // TODO add fetch item
+
+    /// Enables/disables payload manifest recalculation on `finalize()`. This is enabled by default,
+    /// but can be disabled if the digest algorithms in use have not changed and there were no
+    /// changes to the payload.
+    pub fn recalculate_payload_manifests(mut self, recalculate: bool) -> Self {
+        self.recalculate_payload_manifests = recalculate;
+        self
+    }
+
+    /// Writes the changes to disk and recalculates manifests.
+    pub fn finalize(mut self) -> Result<Bag> {
+        let base_dir = &self.bag.base_dir;
+        let algorithms = &self.bag.algorithms;
+
+        self.bag.bag_info.add_bagging_date(current_date_str());
+
+        if self.recalculate_payload_manifests {
+            delete_payload_manifests(base_dir)?;
+            let payload_meta = update_payload_manifests(base_dir, algorithms)?;
+            self.bag
+                .bag_info
+                .add_payload_oxum(build_payload_oxum(&payload_meta));
+        }
+
+        write_bag_info(&self.bag.bag_info, base_dir)?;
+
+        delete_tag_manifests(base_dir)?;
+        update_tag_manifests(base_dir, algorithms)?;
+
+        Ok(self.bag)
     }
 }
 
@@ -227,6 +295,43 @@ where
     Ok(file_meta)
 }
 
+/// Calculates the digests for all of the payload files in the bag and writes the manifests
+fn update_payload_manifests<P: AsRef<Path>>(
+    base_dir: P,
+    algorithms: &[DigestAlgorithm],
+) -> Result<Vec<FileMeta>> {
+    let base_dir = base_dir.as_ref();
+    let mut meta = calculate_digests(base_dir.join(DATA), algorithms, |_| true)?;
+    add_data_prefix(&mut meta);
+
+    write_payload_manifests(algorithms, &meta, base_dir)?;
+
+    Ok(meta)
+}
+
+/// Prefixes all payload files with `data/`
+fn add_data_prefix(file_meta: &mut [FileMeta]) {
+    let relative_data_dir = PathBuf::from(DATA);
+
+    for meta in file_meta {
+        meta.path = relative_data_dir.join(&meta.path);
+    }
+}
+
+/// Calculates the digests for all of the tag files in the bag and writes the tag manifests
+fn update_tag_manifests<P: AsRef<Path>>(base_dir: P, algorithms: &[DigestAlgorithm]) -> Result<()> {
+    let base_dir = base_dir.as_ref();
+    let meta = calculate_digests(base_dir, algorithms, |f| {
+        // Skip the data directory and all tag manifests
+        f.file_name() != DATA
+            && f.file_name()
+                .to_str()
+                .map(|n| !TAG_MANIFEST_MATCHER.is_match(n))
+                .unwrap_or(true)
+    })?;
+    write_tag_manifests(algorithms, &meta, base_dir)
+}
+
 /// Calculates the digests for all of the files under the `base_dir`
 fn calculate_digests<D, P>(
     base_dir: D,
@@ -264,6 +369,25 @@ where
     Ok(file_meta)
 }
 
+fn write_payload_manifests<P: AsRef<Path>>(
+    algorithms: &[DigestAlgorithm],
+    file_meta: &[FileMeta],
+    base_dir: P,
+) -> Result<()> {
+    // TODO this is currently not taking into account fetch.txt
+    write_manifests(algorithms, file_meta, PAYLOAD_MANIFEST_PREFIX, base_dir)
+}
+
+fn write_tag_manifests<P: AsRef<Path>>(
+    algorithms: &[DigestAlgorithm],
+    file_meta: &[FileMeta],
+    base_dir: P,
+) -> Result<()> {
+    write_manifests(algorithms, file_meta, TAG_MANIFEST_PREFIX, base_dir)
+}
+
+// TODO remember to consider *
+// TODO `\` backslash escaping?
 fn write_manifests<P: AsRef<Path>>(
     algorithms: &[DigestAlgorithm],
     file_meta: &[FileMeta],
@@ -282,7 +406,7 @@ fn write_manifests<P: AsRef<Path>>(
     }
 
     for meta in file_meta {
-        // TODO LF and CR must be % encoded
+        // TODO LF, CR, and % must be % encoded -- however! existing clients do NOT do this!
         // TODO on windows, `\` must be converted to `/`
         let path = meta.path.display();
         for algorithm in algorithms {
@@ -293,7 +417,8 @@ fn write_manifests<P: AsRef<Path>>(
             let manifest = manifests
                 .get_mut(algorithm)
                 .expect("Missing expected file digest");
-            writeln!(manifest, "{digest} {path}").context(IoGeneralSnafu {})?;
+            // TODO note when reading these files that `./data/` is ALLOWED
+            writeln!(manifest, "{digest}  {path}").context(IoGeneralSnafu {})?;
         }
     }
 
@@ -305,6 +430,69 @@ fn rename<F: AsRef<Path>, T: AsRef<Path>>(from: F, to: T) -> Result<()> {
     let to = to.as_ref();
     info!("Moving {} to {}", from.display(), to.display());
     fs::rename(from, to).context(IoMoveSnafu { from, to })
+}
+
+/// Deletes all payload manifests in the base directory
+fn delete_payload_manifests<P: AsRef<Path>>(base_dir: P) -> Result<()> {
+    delete_matching_files(base_dir, &PAYLOAD_MANIFEST_MATCHER)
+}
+
+/// Deletes all tag manifests in the base directory
+fn delete_tag_manifests<P: AsRef<Path>>(base_dir: P) -> Result<()> {
+    delete_matching_files(base_dir, &TAG_MANIFEST_MATCHER)
+}
+
+fn delete_matching_files<P: AsRef<Path>>(base_dir: P, file_regex: &Regex) -> Result<()> {
+    for_matching_files(base_dir, file_regex, |path, _| {
+        info!("Deleting file {}", path.display());
+        if let Err(e) = fs::remove_file(path) {
+            if e.kind() != ErrorKind::NotFound {
+                error!("Failed to delete file {}", path.display())
+            }
+        }
+    })
+}
+
+fn detect_digest_algorithms<P: AsRef<Path>>(base_dir: P) -> Result<Vec<DigestAlgorithm>> {
+    let mut algorithms = Vec::new();
+
+    for_matching_files(base_dir, &PAYLOAD_MANIFEST_MATCHER, |_, captures| {
+        let algorithm_str = captures.get(1).unwrap().as_str();
+        match algorithm_str.try_into() {
+            Ok(algorithm) => algorithms.push(algorithm),
+            Err(_) => warn!("Detected unsupported digest algorithm: {algorithm_str}"),
+        }
+    })?;
+
+    Ok(algorithms)
+}
+
+/// Iterates the files in a directory and applies `on_match` to the ones with file names that match
+/// `file_regex`. `on_match` receives the path to the matched file as well as the captures from the
+/// match.
+fn for_matching_files<P, M>(base_dir: P, file_regex: &Regex, mut on_match: M) -> Result<()>
+where
+    P: AsRef<Path>,
+    M: FnMut(&Path, &Captures),
+{
+    let base_dir = base_dir.as_ref();
+
+    for file in fs::read_dir(base_dir).context(IoReadDirSnafu { path: base_dir })? {
+        let file = file.context(IoReadDirSnafu { path: base_dir })?;
+        if file
+            .file_type()
+            .context(IoStatSnafu { path: file.path() })?
+            .is_file()
+        {
+            if let Some(file_name) = file.file_name().to_str() {
+                if let Some(captures) = file_regex.captures(file_name) {
+                    on_match(&file.path(), &captures);
+                }
+            }
+        }
+    }
+
+    Ok(())
 }
 
 fn build_payload_oxum(file_meta: &[FileMeta]) -> String {

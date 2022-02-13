@@ -1,4 +1,11 @@
 use crate::bagit::bag::BagItVersion;
+use once_cell::sync::Lazy;
+use regex::Regex;
+
+pub static PAYLOAD_MANIFEST_MATCHER: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"^manifest-([[:alnum:]]+)\.txt$").unwrap());
+pub static TAG_MANIFEST_MATCHER: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"^tagmanifest-([[:alnum:]]+)\.txt$").unwrap());
 
 pub const BAGIT_1_0: BagItVersion = BagItVersion::new(1, 0);
 pub const BAGIT_DEFAULT_VERSION: BagItVersion = BAGIT_1_0;

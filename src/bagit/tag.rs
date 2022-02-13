@@ -38,21 +38,20 @@ pub struct TagList {
     tags: Vec<Tag>,
 }
 
-/// Writes a tag file to the specified destination
-pub fn write_tag_file<P: AsRef<Path>>(tags: &TagList, destination: P) -> Result<()> {
-    let destination = destination.as_ref();
-    info!("Writing tag file {}", destination.display());
+/// Writes bagit.txt to the bag's base directory
+pub fn write_bag_declaration<P: AsRef<Path>>(
+    bag_declaration: &BagDeclaration,
+    base_dir: P,
+) -> Result<()> {
+    write_tag_file(
+        &bag_declaration.to_tags(),
+        base_dir.as_ref().join(BAGIT_TXT),
+    )
+}
 
-    let mut writer =
-        BufWriter::new(File::create(destination).context(IoCreateSnafu { path: destination })?);
-
-    for tag in tags {
-        // TODO temp
-        writeln!(writer, "{}: {}", tag.label, tag.value)
-            .context(IoWriteSnafu { path: destination })?;
-    }
-
-    Ok(())
+/// Writes bag-info.txt to the bag's base directory
+pub fn write_bag_info<P: AsRef<Path>>(bag_info: &BagInfo, base_dir: P) -> Result<()> {
+    write_tag_file(bag_info.as_ref(), base_dir.as_ref().join(BAG_INFO_TXT))
 }
 
 /// Reads a bag declaration out of the specified `base_dir`
@@ -60,6 +59,13 @@ pub fn read_bag_declaration<P: AsRef<Path>>(base_dir: P) -> Result<BagDeclaratio
     let bagit_file = base_dir.as_ref().join(BAGIT_TXT);
     let tags = read_tag_file(&bagit_file)?;
     tags.try_into()
+}
+
+/// Reads bag info out of the specified `base_dir`
+pub fn read_bag_info<P: AsRef<Path>>(base_dir: P) -> Result<BagInfo> {
+    let bagit_file = base_dir.as_ref().join(BAG_INFO_TXT);
+    let tags = read_tag_file(&bagit_file)?;
+    Ok(tags.into())
 }
 
 impl BagDeclaration {
@@ -139,20 +145,25 @@ impl BagInfo {
         }
     }
 
+    pub fn with_generated<D: AsRef<str>, O: AsRef<str>>(bagging_date: D, payload_oxum: O) -> Self {
+        let mut info = Self::with_capacity(2);
+        info.add_bagging_date(bagging_date);
+        info.add_payload_oxum(payload_oxum);
+        info
+    }
+
     pub fn with_tags(tags: TagList) -> Self {
         Self { tags }
     }
 
-    pub fn add_bagging_date<S: AsRef<str>>(&mut self, value: S) -> &mut Self {
+    pub fn add_bagging_date<S: AsRef<str>>(&mut self, value: S) {
         self.tags.remove_tags(LABEL_BAGGING_DATE);
         self.tags.add_tag(LABEL_BAGGING_DATE, value);
-        self
     }
 
-    pub fn add_payload_oxum<S: AsRef<str>>(&mut self, value: S) -> &mut Self {
+    pub fn add_payload_oxum<S: AsRef<str>>(&mut self, value: S) {
         self.tags.remove_tags(LABEL_PAYLOAD_OXUM);
         self.tags.add_tag(LABEL_PAYLOAD_OXUM, value);
-        self
     }
 }
 
@@ -171,6 +182,12 @@ impl From<TagList> for BagInfo {
 impl From<BagInfo> for TagList {
     fn from(info: BagInfo) -> Self {
         info.tags
+    }
+}
+
+impl AsRef<TagList> for BagInfo {
+    fn as_ref(&self) -> &TagList {
+        &self.tags
     }
 }
 
@@ -252,6 +269,23 @@ impl<'a> IntoIterator for &'a TagList {
     }
 }
 
+/// Writes a tag file to the specified destination
+fn write_tag_file<P: AsRef<Path>>(tags: &TagList, destination: P) -> Result<()> {
+    let destination = destination.as_ref();
+    info!("Writing tag file {}", destination.display());
+
+    let mut writer =
+        BufWriter::new(File::create(destination).context(IoCreateSnafu { path: destination })?);
+
+    for tag in tags {
+        // TODO handle multi-line tags
+        writeln!(writer, "{}: {}", tag.label, tag.value)
+            .context(IoWriteSnafu { path: destination })?;
+    }
+
+    Ok(())
+}
+
 fn read_tag_file<P: AsRef<Path>>(path: P) -> Result<TagList> {
     let path = path.as_ref();
     let mut reader = BufReader::new(File::open(path).context(IoReadSnafu { path })?);
@@ -261,7 +295,7 @@ fn read_tag_file<P: AsRef<Path>>(path: P) -> Result<TagList> {
 
     loop {
         // TODO this only works for UTF-8
-        let mut read = reader.read_line(&mut line).context(IoReadSnafu { path })?;
+        let read = reader.read_line(&mut line).context(IoReadSnafu { path })?;
 
         if read == 0 {
             break;
@@ -290,7 +324,7 @@ fn parse_tag_line<S: AsRef<str>>(line: S) -> Result<Tag> {
             })
         } else {
             // TODO does this work for CRLF as well?
-            let trim_value = if value.ends_with("\n") {
+            let trim_value = if value.ends_with('\n') {
                 &value[1..value.len() - 1]
             } else {
                 &value[1..]
