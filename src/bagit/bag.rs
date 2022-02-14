@@ -88,7 +88,7 @@ pub fn create_bag<P: AsRef<Path>>(base_dir: P, algorithms: &[DigestAlgorithm]) -
     let declaration = BagDeclaration::new();
     write_bag_declaration(&declaration, base_dir)?;
 
-    let bag_info = BagInfo::with_generated(current_date_str(), build_payload_oxum(&payload_meta));
+    let bag_info = BagInfo::with_generated(current_date_str(), build_payload_oxum(&payload_meta))?;
 
     write_bag_info(&bag_info, base_dir)?;
 
@@ -205,14 +205,15 @@ impl BagUpdater {
         let base_dir = &self.bag.base_dir;
         let algorithms = &self.bag.algorithms;
 
-        self.bag.bag_info.add_bagging_date(current_date_str());
+        // TODO should updating these values keep the original position?
+        self.bag.bag_info.add_bagging_date(current_date_str())?;
 
         if self.recalculate_payload_manifests {
             delete_payload_manifests(base_dir)?;
             let payload_meta = update_payload_manifests(base_dir, algorithms)?;
             self.bag
                 .bag_info
-                .add_payload_oxum(build_payload_oxum(&payload_meta));
+                .add_payload_oxum(build_payload_oxum(&payload_meta))?;
         }
 
         write_bag_info(&self.bag.bag_info, base_dir)?;

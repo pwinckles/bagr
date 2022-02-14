@@ -1,6 +1,6 @@
 use log::{debug, info};
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, Write};
+use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::Path;
 use std::slice::Iter;
 use std::vec::IntoIter;
@@ -10,7 +10,7 @@ use snafu::ResultExt;
 use crate::bagit::bag::BagItVersion;
 use crate::bagit::consts::*;
 use crate::bagit::error::*;
-use crate::bagit::Error::{InvalidTagLine, MissingTag, UnsupportedEncoding, UnsupportedVersion};
+use crate::bagit::Error::*;
 
 #[derive(Debug)]
 pub struct BagDeclaration {
@@ -72,7 +72,6 @@ impl BagDeclaration {
     pub fn new() -> Self {
         Self {
             version: BAGIT_DEFAULT_VERSION,
-            // TODO encoding
             encoding: UTF_8.into(),
         }
     }
@@ -98,8 +97,10 @@ impl BagDeclaration {
 
     pub fn to_tags(&self) -> TagList {
         let mut tags = TagList::with_capacity(2);
-        tags.add_tag(LABEL_BAGIT_VERSION, self.version.to_string());
-        tags.add_tag(LABEL_FILE_ENCODING, &self.encoding);
+        // Safe to unwrap because it's not possible to create this object with invalid values
+        tags.add_tag(LABEL_BAGIT_VERSION, self.version.to_string())
+            .unwrap();
+        tags.add_tag(LABEL_FILE_ENCODING, &self.encoding).unwrap();
         tags
     }
 }
@@ -145,25 +146,28 @@ impl BagInfo {
         }
     }
 
-    pub fn with_generated<D: AsRef<str>, O: AsRef<str>>(bagging_date: D, payload_oxum: O) -> Self {
+    pub fn with_generated<D: AsRef<str>, O: AsRef<str>>(
+        bagging_date: D,
+        payload_oxum: O,
+    ) -> Result<Self> {
         let mut info = Self::with_capacity(2);
-        info.add_bagging_date(bagging_date);
-        info.add_payload_oxum(payload_oxum);
-        info
+        info.add_bagging_date(bagging_date)?;
+        info.add_payload_oxum(payload_oxum)?;
+        Ok(info)
     }
 
     pub fn with_tags(tags: TagList) -> Self {
         Self { tags }
     }
 
-    pub fn add_bagging_date<S: AsRef<str>>(&mut self, value: S) {
+    pub fn add_bagging_date<S: AsRef<str>>(&mut self, value: S) -> Result<()> {
         self.tags.remove_tags(LABEL_BAGGING_DATE);
-        self.tags.add_tag(LABEL_BAGGING_DATE, value);
+        self.tags.add_tag(LABEL_BAGGING_DATE, value)
     }
 
-    pub fn add_payload_oxum<S: AsRef<str>>(&mut self, value: S) {
+    pub fn add_payload_oxum<S: AsRef<str>>(&mut self, value: S) -> Result<()> {
         self.tags.remove_tags(LABEL_PAYLOAD_OXUM);
-        self.tags.add_tag(LABEL_PAYLOAD_OXUM, value);
+        self.tags.add_tag(LABEL_PAYLOAD_OXUM, value)
     }
 }
 
@@ -192,13 +196,48 @@ impl AsRef<TagList> for BagInfo {
 }
 
 impl Tag {
-    // TODO validate label does not contain `:`
-    // TODO validate values
-    pub fn new<L: AsRef<str>, V: AsRef<str>>(label: L, value: V) -> Self {
-        Self {
-            label: label.as_ref().into(),
-            value: value.as_ref().into(),
+    /// Creates a tag and validates that their parts are valid
+    pub fn new<L: AsRef<str>, V: AsRef<str>>(label: L, value: V) -> Result<Self> {
+        let label = label.as_ref();
+        let value = value.as_ref();
+
+        Tag::validate_label(label)?;
+        Tag::validate_value(label, value)?;
+
+        Ok(Self {
+            label: label.into(),
+            value: value.into(),
+        })
+    }
+
+    fn validate_label(label: &str) -> Result<()> {
+        let is_whitespace = |c: char| c.is_whitespace();
+
+        if label.starts_with(is_whitespace) || label.ends_with(is_whitespace) {
+            return Err(InvalidTag {
+                label: label.into(),
+                details: "Label must not start or end with whitespace".into(),
+            });
+        } else if label.contains(|c: char| c == CR || c == LF) {
+            return Err(InvalidTag {
+                label: label.into(),
+                details: "Label must not contain CR or LF characters".into(),
+            });
         }
+
+        Ok(())
+    }
+
+    fn validate_value(label: &str, value: &str) -> Result<()> {
+        // CR/LF will only appear in a value when serialized
+        if value.contains(|c: char| c == CR || c == LF) {
+            return Err(InvalidTag {
+                label: label.into(),
+                details: "Value must not contain CR or LF characters".into(),
+            });
+        }
+
+        Ok(())
     }
 }
 
@@ -234,8 +273,9 @@ impl TagList {
         self.tags.push(tag);
     }
 
-    pub fn add_tag<L: AsRef<str>, V: AsRef<str>>(&mut self, label: L, value: V) {
-        self.tags.push(Tag::new(label, value));
+    pub fn add_tag<L: AsRef<str>, V: AsRef<str>>(&mut self, label: L, value: V) -> Result<()> {
+        self.tags.push(Tag::new(label, value)?);
+        Ok(())
     }
 
     /// Removes all of the tags with the provided label. It uses a case insensitive match.
@@ -291,18 +331,80 @@ fn read_tag_file<P: AsRef<Path>>(path: P) -> Result<TagList> {
     let mut reader = BufReader::new(File::open(path).context(IoReadSnafu { path })?);
 
     let mut tags = TagList::new();
+    let mut line_count: u32 = 0;
+
     let mut line = String::new();
+    let mut buf: [u8; BUF_SIZE] = [0; BUF_SIZE];
+    let mut pos = None;
+    let mut read = 0;
 
     loop {
         // TODO this only works for UTF-8
-        let read = reader.read_line(&mut line).context(IoReadSnafu { path })?;
+        // TODO incomplete: must account for multi-line tags
+        // TODO test line ending support
 
-        if read == 0 {
+        if pos.is_none() || pos.unwrap() == read {
+            read = reader.read(&mut buf).context(IoReadSnafu { path })?;
+            pos = Some(0);
+        }
+
+        if read == 0 && line.is_empty() {
             break;
         }
 
-        // TODO incomplete: must account for multi-line tags
-        tags.add(parse_tag_line(&line)?);
+        let mut seen_cr = false;
+        let mut found_end = false;
+
+        for i in pos.unwrap()..read {
+            let c = buf[i] as char;
+
+            if seen_cr && c != LF {
+                found_end = true;
+                pos = Some(i);
+                break;
+            } else if c == CR {
+                seen_cr = true;
+            } else if c == LF {
+                found_end = true;
+                pos = Some(i + 1);
+                break;
+            } else {
+                line.push(c);
+            }
+        }
+
+        // Read the whole buffer but didn't find the end of the line
+        if !found_end {
+            pos = None;
+            continue;
+        }
+
+        line_count += 1;
+
+        match parse_tag_line(&line) {
+            Ok(tag) => tags.add(tag),
+            Err(InvalidTag { details, label: _ }) => {
+                return Err(InvalidTagLineWithRef {
+                    details,
+                    path: path.into(),
+                    num: line_count,
+                })
+            }
+            Err(InvalidTagLine { details }) => {
+                return Err(InvalidTagLineWithRef {
+                    details,
+                    path: path.into(),
+                    num: line_count,
+                })
+            }
+            Err(e) => {
+                return Err(InvalidTagLineWithRef {
+                    details: e.to_string(),
+                    path: path.into(),
+                    num: line_count,
+                })
+            }
+        }
 
         line.clear();
     }
@@ -315,28 +417,19 @@ fn parse_tag_line<S: AsRef<str>>(line: S) -> Result<Tag> {
 
     if let Some((label, value)) = line.split_once(':') {
         debug!("Tag [`{label}`:`{value}`]");
-        let char1 = value.chars().next();
 
-        if char1.is_none() || !(char1.unwrap() == ' ' || char1.unwrap() == '\t') {
+        if !value.starts_with(|c: char| c == ' ' || c == '\t') {
             Err(InvalidTagLine {
-                line: line.into(),
-                details: "value part must start with one whitespace character".to_string(),
+                details: "Value part must start with one whitespace character".to_string(),
             })
         } else {
-            // TODO does this work for CRLF as well?
-            let trim_value = if value.ends_with('\n') {
-                &value[1..value.len() - 1]
-            } else {
-                &value[1..]
-            };
-
+            let trim_value = &value[1..];
             debug!("Tag [`{label}`:`{trim_value}`]");
-            Ok(Tag::new(label, trim_value))
+            Tag::new(label, trim_value)
         }
     } else {
         Err(InvalidTagLine {
-            line: line.into(),
-            details: "missing colon".to_string(),
+            details: "Missing colon separating the label and value".to_string(),
         })
     }
 }

@@ -155,6 +155,7 @@ impl<W: Write> MultiDigestWriter<W> {
         }
     }
 
+    #[allow(unused)]
     pub fn inner(&self) -> &W {
         &self.inner
     }

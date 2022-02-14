@@ -49,8 +49,16 @@ pub enum Error {
     WalkFile { source: walkdir::Error },
     #[snafu(display("Encountered an unsupported file type at {}", path.display()))]
     UnsupportedFile { path: PathBuf },
-    #[snafu(display("Invalid tag line, {details}: {line}"))]
-    InvalidTagLine { line: String, details: String },
+    #[snafu(display("Invalid tag line: {details}"))]
+    InvalidTagLine { details: String },
+    #[snafu(display("Invalid tag line in file {} on line {num}: {details}", path.display()))]
+    InvalidTagLineWithRef {
+        path: PathBuf,
+        num: u32,
+        details: String,
+    },
+    #[snafu(display("Invalid tag with label '{label}': {details}"))]
+    InvalidTag { label: String, details: String },
     #[snafu(display("Invalid BagIt version: {value}"))]
     InvalidBagItVersion { value: String },
     #[snafu(display("Missing required tag {tag}"))]

@@ -7,6 +7,10 @@ pub static PAYLOAD_MANIFEST_MATCHER: Lazy<Regex> =
 pub static TAG_MANIFEST_MATCHER: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"^tagmanifest-([[:alnum:]]+)\.txt$").unwrap());
 
+pub const CR: char = '\r';
+pub const LF: char = '\n';
+pub const BUF_SIZE: usize = 8 * 1024;
+
 pub const BAGIT_1_0: BagItVersion = BagItVersion::new(1, 0);
 pub const BAGIT_DEFAULT_VERSION: BagItVersion = BAGIT_1_0;
 
