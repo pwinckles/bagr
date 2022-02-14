@@ -378,6 +378,10 @@ fn read_tag_file<P: AsRef<Path>>(path: P) -> Result<TagList> {
     Ok(tags)
 }
 
+fn bytes_to_string(bytes: Vec<u8>) -> Result<String> {
+    String::from_utf8(bytes).context(InvalidStringSnafu {})
+}
+
 impl<R: Read> LineReader<R> {
     fn new(reader: R) -> Self {
         Self {
@@ -398,7 +402,7 @@ impl<R: Read> Iterator for LineReader<R> {
             return None;
         }
 
-        let mut line = String::new();
+        let mut line = Vec::new();
 
         loop {
             if self.position >= self.read {
@@ -419,7 +423,7 @@ impl<R: Read> Iterator for LineReader<R> {
                 return if line.is_empty() {
                     None
                 } else {
-                    Some(Ok(line))
+                    Some(bytes_to_string(line))
                 };
             }
 
@@ -427,20 +431,20 @@ impl<R: Read> Iterator for LineReader<R> {
             let mut found_end = false;
 
             for i in self.position..self.read {
-                let c = self.buf[i] as char;
+                let b = self.buf[i];
 
-                if seen_cr && c != LF {
+                if seen_cr && b != LF_B {
                     found_end = true;
                     self.position = i;
                     break;
-                } else if c == CR {
+                } else if b == CR_B {
                     seen_cr = true;
-                } else if c == LF {
+                } else if b == LF_B {
                     found_end = true;
                     self.position = i + 1;
                     break;
                 } else {
-                    line.push(c);
+                    line.push(b);
                 }
             }
 
@@ -451,7 +455,7 @@ impl<R: Read> Iterator for LineReader<R> {
                 continue;
             }
 
-            return Some(Ok(line));
+            return Some(bytes_to_string(line));
         }
     }
 }
@@ -501,11 +505,11 @@ mod tests {
 
     #[test]
     fn read_lines_with_different_endings() {
-        let input = "line 1\rline 2\r\nline 3\n";
+        let input = "\r\nline 1\rline 2\r\nline 3\n";
         let reader = LineReader::new(BufReader::new(input.as_bytes()));
 
         let lines: Vec<String> = reader.flatten().collect();
 
-        assert_eq!(vec!["line 1", "line 2", "line 3"], lines);
+        assert_eq!(vec!["", "line 1", "line 2", "line 3"], lines);
     }
 }

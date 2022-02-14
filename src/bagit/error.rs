@@ -1,6 +1,7 @@
 use crate::bagit::bag::BagItVersion;
 use snafu::prelude::*;
 use std::path::PathBuf;
+use std::string::FromUtf8Error;
 
 pub type Result<T, E = Error> = core::result::Result<T, E>;
 
@@ -67,4 +68,6 @@ pub enum Error {
     UnsupportedVersion { version: BagItVersion },
     #[snafu(display("Unsupported file encoding {encoding}"))]
     UnsupportedEncoding { encoding: String },
+    #[snafu(display("Failed to decode string: {source}"))]
+    InvalidString { source: FromUtf8Error },
 }
