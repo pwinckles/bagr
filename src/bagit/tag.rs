@@ -38,6 +38,14 @@ pub struct TagList {
     tags: Vec<Tag>,
 }
 
+struct LineReader<R: Read> {
+    reader: R,
+    buf: [u8; BUF_SIZE],
+    position: usize,
+    read: usize,
+    end: bool,
+}
+
 /// Writes bagit.txt to the bag's base directory
 pub fn write_bag_declaration<P: AsRef<Path>>(
     bag_declaration: &BagDeclaration,
@@ -328,58 +336,17 @@ fn write_tag_file<P: AsRef<Path>>(tags: &TagList, destination: P) -> Result<()> 
 
 fn read_tag_file<P: AsRef<Path>>(path: P) -> Result<TagList> {
     let path = path.as_ref();
-    let mut reader = BufReader::new(File::open(path).context(IoReadSnafu { path })?);
+    let reader = LineReader::new(BufReader::new(
+        File::open(path).context(IoReadSnafu { path })?,
+    ));
 
     let mut tags = TagList::new();
     let mut line_count: u32 = 0;
 
-    let mut line = String::new();
-    let mut buf: [u8; BUF_SIZE] = [0; BUF_SIZE];
-    let mut pos = None;
-    let mut read = 0;
-
-    loop {
-        // TODO this only works for UTF-8
-        // TODO incomplete: must account for multi-line tags
-        // TODO test line ending support
-
-        if pos.is_none() || pos.unwrap() == read {
-            read = reader.read(&mut buf).context(IoReadSnafu { path })?;
-            pos = Some(0);
-        }
-
-        if read == 0 && line.is_empty() {
-            break;
-        }
-
-        let mut seen_cr = false;
-        let mut found_end = false;
-
-        for i in pos.unwrap()..read {
-            let c = buf[i] as char;
-
-            if seen_cr && c != LF {
-                found_end = true;
-                pos = Some(i);
-                break;
-            } else if c == CR {
-                seen_cr = true;
-            } else if c == LF {
-                found_end = true;
-                pos = Some(i + 1);
-                break;
-            } else {
-                line.push(c);
-            }
-        }
-
-        // Read the whole buffer but didn't find the end of the line. But, there was nothing in
-        // the buffer, then we must have hit the end of the file.
-        if !found_end && read != 0 {
-            pos = None;
-            continue;
-        }
-
+    // TODO this only works for UTF-8
+    // TODO incomplete: must account for multi-line tags
+    for line in reader {
+        let line = line?;
         line_count += 1;
 
         match parse_tag_line(&line) {
@@ -406,11 +373,87 @@ fn read_tag_file<P: AsRef<Path>>(path: P) -> Result<TagList> {
                 })
             }
         }
-
-        line.clear();
     }
 
     Ok(tags)
+}
+
+impl<R: Read> LineReader<R> {
+    fn new(reader: R) -> Self {
+        Self {
+            reader,
+            buf: [0; BUF_SIZE],
+            position: 0,
+            read: 0,
+            end: false,
+        }
+    }
+}
+
+impl<R: Read> Iterator for LineReader<R> {
+    type Item = Result<String>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.end {
+            return None;
+        }
+
+        let mut line = String::new();
+
+        loop {
+            if self.position >= self.read {
+                match self.reader.read(&mut self.buf) {
+                    Ok(read) => {
+                        if read == 0 {
+                            self.end = true;
+                        } else {
+                            self.read = read;
+                            self.position = 0;
+                        }
+                    }
+                    Err(e) => return Some(Err(IoGeneral { source: e })),
+                }
+            }
+
+            if self.end {
+                return if line.is_empty() {
+                    None
+                } else {
+                    Some(Ok(line))
+                };
+            }
+
+            let mut seen_cr = false;
+            let mut found_end = false;
+
+            for i in self.position..self.read {
+                let c = self.buf[i] as char;
+
+                if seen_cr && c != LF {
+                    found_end = true;
+                    self.position = i;
+                    break;
+                } else if c == CR {
+                    seen_cr = true;
+                } else if c == LF {
+                    found_end = true;
+                    self.position = i + 1;
+                    break;
+                } else {
+                    line.push(c);
+                }
+            }
+
+            // Read the whole buffer but didn't find the end of the line, try again
+            if !found_end {
+                self.position = 0;
+                self.read = 0;
+                continue;
+            }
+
+            return Some(Ok(line));
+        }
+    }
 }
 
 fn parse_tag_line<S: AsRef<str>>(line: S) -> Result<Tag> {
@@ -432,5 +475,37 @@ fn parse_tag_line<S: AsRef<str>>(line: S) -> Result<Tag> {
         Err(InvalidTagLine {
             details: "Missing colon separating the label and value".to_string(),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::bagit::tag::LineReader;
+    use std::io::BufReader;
+
+    #[test]
+    fn read_lines_with_different_endings_no_endline() {
+        let input = "line 1\rline 2\r\rline 3\r\nline 4\nline 5\rline 6\r\nline 7\n\rline 8";
+        let reader = LineReader::new(BufReader::new(input.as_bytes()));
+
+        let lines: Vec<String> = reader.flatten().collect();
+
+        assert_eq!(
+            vec![
+                "line 1", "line 2", "", "line 3", "line 4", "line 5", "line 6", "line 7", "",
+                "line 8"
+            ],
+            lines
+        );
+    }
+
+    #[test]
+    fn read_lines_with_different_endings() {
+        let input = "line 1\rline 2\r\nline 3\n";
+        let reader = LineReader::new(BufReader::new(input.as_bytes()));
+
+        let lines: Vec<String> = reader.flatten().collect();
+
+        assert_eq!(vec!["line 1", "line 2", "line 3"], lines);
     }
 }
