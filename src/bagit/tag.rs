@@ -373,8 +373,9 @@ fn read_tag_file<P: AsRef<Path>>(path: P) -> Result<TagList> {
             }
         }
 
-        // Read the whole buffer but didn't find the end of the line
-        if !found_end {
+        // Read the whole buffer but didn't find the end of the line. But, there was nothing in
+        // the buffer, then we must have hit the end of the file.
+        if !found_end && read != 0 {
             pos = None;
             continue;
         }
