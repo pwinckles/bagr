@@ -131,7 +131,9 @@ impl<R: Read> Iterator for TagLineReader<R> {
                 Some(Ok(read)) => {
                     if current.is_some() && read.starts_with(is_space_or_tab) {
                         let current = current.as_mut().unwrap();
-                        current.push(SPACE);
+                        if !current.ends_with(is_space_or_tab) {
+                            current.push(SPACE);
+                        }
                         current.push_str(read.trim_start_matches(is_space_or_tab));
                     } else if current.is_some() {
                         self.next = Some(read);
@@ -183,7 +185,7 @@ mod tests {
     #[test]
     fn read_multi_line_tags() {
         let input =
-            "tag-1: normal tag\ntag-2: 1\r 2\n\t3\r\ntag-3:\t4\n   5\n  \n \t 6\ntag-4: end";
+            "tag-1: normal tag\ntag-2: 1 \r 2\n\t3\r\ntag-3:\t4\n   5\n  \n \t 6\ntag-4: end";
         let reader = TagLineReader::new(BufReader::new(input.as_bytes()));
 
         let lines: Vec<String> = reader.flatten().collect();
@@ -192,7 +194,7 @@ mod tests {
             vec![
                 "tag-1: normal tag",
                 "tag-2: 1 2 3",
-                "tag-3:\t4 5  6",
+                "tag-3:\t4 5 6",
                 "tag-4: end"
             ],
             lines
