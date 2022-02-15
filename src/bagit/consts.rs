@@ -9,6 +9,8 @@ pub static TAG_MANIFEST_MATCHER: Lazy<Regex> =
 
 pub const CR: char = '\r';
 pub const LF: char = '\n';
+pub const TAB: char = '\t';
+pub const SPACE: char = ' ';
 pub const CR_B: u8 = b'\r';
 pub const LF_B: u8 = b'\n';
 pub const BUF_SIZE: usize = 8 * 1024;

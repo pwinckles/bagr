@@ -1,6 +1,6 @@
 use log::{debug, info};
 use std::fs::File;
-use std::io::{BufReader, BufWriter, Read, Write};
+use std::io::{BufReader, BufWriter, Write};
 use std::path::Path;
 use std::slice::Iter;
 use std::vec::IntoIter;
@@ -10,6 +10,7 @@ use snafu::ResultExt;
 use crate::bagit::bag::BagItVersion;
 use crate::bagit::consts::*;
 use crate::bagit::error::*;
+use crate::bagit::io::{is_space_or_tab, TagLineReader};
 use crate::bagit::Error::*;
 
 #[derive(Debug)]
@@ -36,14 +37,6 @@ pub struct Tag {
 #[derive(Debug)]
 pub struct TagList {
     tags: Vec<Tag>,
-}
-
-struct LineReader<R: Read> {
-    reader: R,
-    buf: [u8; BUF_SIZE],
-    position: usize,
-    read: usize,
-    end: bool,
 }
 
 /// Writes bagit.txt to the bag's base directory
@@ -161,6 +154,7 @@ impl BagInfo {
         let mut info = Self::with_capacity(2);
         info.add_bagging_date(bagging_date)?;
         info.add_payload_oxum(payload_oxum)?;
+        // TODO add bagging agent
         Ok(info)
     }
 
@@ -219,9 +213,7 @@ impl Tag {
     }
 
     fn validate_label(label: &str) -> Result<()> {
-        let is_whitespace = |c: char| c.is_whitespace();
-
-        if label.starts_with(is_whitespace) || label.ends_with(is_whitespace) {
+        if label.starts_with(is_space_or_tab) || label.ends_with(is_space_or_tab) {
             return Err(InvalidTag {
                 label: label.into(),
                 details: "Label must not start or end with whitespace".into(),
@@ -336,7 +328,7 @@ fn write_tag_file<P: AsRef<Path>>(tags: &TagList, destination: P) -> Result<()> 
 
 fn read_tag_file<P: AsRef<Path>>(path: P) -> Result<TagList> {
     let path = path.as_ref();
-    let reader = LineReader::new(BufReader::new(
+    let reader = TagLineReader::new(BufReader::new(
         File::open(path).context(IoReadSnafu { path })?,
     ));
 
@@ -344,7 +336,7 @@ fn read_tag_file<P: AsRef<Path>>(path: P) -> Result<TagList> {
     let mut line_count: u32 = 0;
 
     // TODO this only works for UTF-8
-    // TODO incomplete: must account for multi-line tags
+    // TODO how should empty lines be handled?
     for line in reader {
         let line = line?;
         line_count += 1;
@@ -378,95 +370,13 @@ fn read_tag_file<P: AsRef<Path>>(path: P) -> Result<TagList> {
     Ok(tags)
 }
 
-fn bytes_to_string(bytes: Vec<u8>) -> Result<String> {
-    String::from_utf8(bytes).context(InvalidStringSnafu {})
-}
-
-impl<R: Read> LineReader<R> {
-    fn new(reader: R) -> Self {
-        Self {
-            reader,
-            buf: [0; BUF_SIZE],
-            position: 0,
-            read: 0,
-            end: false,
-        }
-    }
-}
-
-impl<R: Read> Iterator for LineReader<R> {
-    type Item = Result<String>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.end {
-            return None;
-        }
-
-        let mut line = Vec::new();
-
-        loop {
-            if self.position >= self.read {
-                match self.reader.read(&mut self.buf) {
-                    Ok(read) => {
-                        if read == 0 {
-                            self.end = true;
-                        } else {
-                            self.read = read;
-                            self.position = 0;
-                        }
-                    }
-                    Err(e) => return Some(Err(IoGeneral { source: e })),
-                }
-            }
-
-            if self.end {
-                return if line.is_empty() {
-                    None
-                } else {
-                    Some(bytes_to_string(line))
-                };
-            }
-
-            let mut seen_cr = false;
-            let mut found_end = false;
-
-            for i in self.position..self.read {
-                let b = self.buf[i];
-
-                if seen_cr && b != LF_B {
-                    found_end = true;
-                    self.position = i;
-                    break;
-                } else if b == CR_B {
-                    seen_cr = true;
-                } else if b == LF_B {
-                    found_end = true;
-                    self.position = i + 1;
-                    break;
-                } else {
-                    line.push(b);
-                }
-            }
-
-            // Read the whole buffer but didn't find the end of the line, try again
-            if !found_end {
-                self.position = 0;
-                self.read = 0;
-                continue;
-            }
-
-            return Some(bytes_to_string(line));
-        }
-    }
-}
-
 fn parse_tag_line<S: AsRef<str>>(line: S) -> Result<Tag> {
     let line = line.as_ref();
 
     if let Some((label, value)) = line.split_once(':') {
         debug!("Tag [`{label}`:`{value}`]");
 
-        if !value.starts_with(|c: char| c == ' ' || c == '\t') {
+        if !value.starts_with(is_space_or_tab) {
             Err(InvalidTagLine {
                 details: "Value part must start with one whitespace character".to_string(),
             })
@@ -479,37 +389,5 @@ fn parse_tag_line<S: AsRef<str>>(line: S) -> Result<Tag> {
         Err(InvalidTagLine {
             details: "Missing colon separating the label and value".to_string(),
         })
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::bagit::tag::LineReader;
-    use std::io::BufReader;
-
-    #[test]
-    fn read_lines_with_different_endings_no_endline() {
-        let input = "line 1\rline 2\r\rline 3\r\nline 4\nline 5\rline 6\r\nline 7\n\rline 8";
-        let reader = LineReader::new(BufReader::new(input.as_bytes()));
-
-        let lines: Vec<String> = reader.flatten().collect();
-
-        assert_eq!(
-            vec![
-                "line 1", "line 2", "", "line 3", "line 4", "line 5", "line 6", "line 7", "",
-                "line 8"
-            ],
-            lines
-        );
-    }
-
-    #[test]
-    fn read_lines_with_different_endings() {
-        let input = "\r\nline 1\rline 2\r\nline 3\n";
-        let reader = LineReader::new(BufReader::new(input.as_bytes()));
-
-        let lines: Vec<String> = reader.flatten().collect();
-
-        assert_eq!(vec!["", "line 1", "line 2", "line 3"], lines);
     }
 }

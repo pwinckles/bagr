@@ -6,4 +6,5 @@ mod bag;
 mod consts;
 mod digest;
 mod error;
+mod io;
 mod tag;
