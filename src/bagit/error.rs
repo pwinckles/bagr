@@ -36,6 +36,12 @@ pub enum Error {
         from: PathBuf,
         to: PathBuf,
     },
+    #[snafu(display("Failed to copy {} to {}: {}", from.display(), to.display(), source))]
+    IoCopy {
+        source: std::io::Error,
+        from: PathBuf,
+        to: PathBuf,
+    },
     #[snafu(display("Failed to delete {}: {}", path.display(), source))]
     IoDelete {
         source: std::io::Error,
@@ -52,7 +58,7 @@ pub enum Error {
     UnsupportedFile { path: PathBuf },
     #[snafu(display("Invalid tag line: {details}"))]
     InvalidTagLine { details: String },
-    #[snafu(display("Invalid tag line in file {} on line {num}: {details}", path.display()))]
+    #[snafu(display("Tag number {num} in file {} is invalid: {details}", path.display()))]
     InvalidTagLineWithRef {
         path: PathBuf,
         num: u32,

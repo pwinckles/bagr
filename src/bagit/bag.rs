@@ -54,55 +54,68 @@ struct FileMeta {
 // TODO support 0.97
 // TODO command for upgrading from 0.97 to 1.0?
 
+// TODO update docs
 /// Creates a new bag in place by moving the contents of `base_dir` into the bag's payload and
 /// then writing all of the necessary tag files and manifests. The end result is that the `base_dir`
 /// contains a fully formed bag.
 ///
 /// The `algorithms` are the algorithms that are used when calculating file digests. If none are
 /// provided, then `sha512` is used.
-pub fn create_bag<P: AsRef<Path>>(base_dir: P, algorithms: &[DigestAlgorithm]) -> Result<Bag> {
-    // TODO ctrl+c wiring
+pub fn create_bag<S: AsRef<Path>, D: AsRef<Path>>(
+    src_dir: S,
+    dst_dir: D,
+    algorithms: &[DigestAlgorithm],
+) -> Result<Bag> {
+    let src_dir = src_dir.as_ref();
+    let dst_dir = dst_dir.as_ref();
 
-    let base_dir = base_dir.as_ref();
+    info!("Creating bag in {}", dst_dir.display());
+
+    let in_place = src_dir == dst_dir;
+
     let algorithms = if algorithms.is_empty() {
-        &[DigestAlgorithm::Sha512]
+        &[DEFAULT_ALGORITHM]
     } else {
         algorithms
     };
 
+    if !in_place {
+        fs::create_dir_all(dst_dir).context(IoCreateSnafu { path: dst_dir })?;
+    }
+
     let temp_name = format!("temp-{}", epoch_seconds());
-    let temp_dir = base_dir.join(&temp_name);
+    let temp_dir = dst_dir.join(&temp_name);
 
     fs::create_dir(&temp_dir).context(IoCreateSnafu { path: &temp_dir })?;
 
-    let mut payload_meta = move_into_dir(&base_dir, &temp_dir, algorithms, |f| {
+    let mut payload_meta = move_into_dir(!in_place, &src_dir, &temp_dir, algorithms, |f| {
         f.file_name() != temp_name.as_str()
     })?;
 
-    let data_dir = base_dir.join(DATA);
+    let data_dir = dst_dir.join(DATA);
     rename(temp_dir, &data_dir)?;
 
     add_data_prefix(&mut payload_meta);
-    write_payload_manifests(algorithms, &payload_meta, base_dir)?;
+    write_payload_manifests(algorithms, &payload_meta, dst_dir)?;
 
     let declaration = BagDeclaration::new();
-    write_bag_declaration(&declaration, base_dir)?;
+    write_bag_declaration(&declaration, dst_dir)?;
 
     let bag_info = BagInfo::with_generated(current_date_str(), build_payload_oxum(&payload_meta))?;
 
-    write_bag_info(&bag_info, base_dir)?;
+    write_bag_info(&bag_info, dst_dir)?;
 
-    update_tag_manifests(base_dir, algorithms)?;
+    update_tag_manifests(dst_dir, algorithms)?;
 
     Ok(Bag::new(
-        base_dir,
+        dst_dir,
         declaration,
         bag_info,
         algorithms.to_vec(),
     ))
 }
 
-// TODO docs
+/// Opens a BagIt bag in that already exists in the specified directory
 pub fn open_bag<P: AsRef<Path>>(base_dir: P) -> Result<Bag> {
     let base_dir = base_dir.as_ref();
     info!("Opening bag at {}", base_dir.display());
@@ -225,9 +238,10 @@ impl BagUpdater {
     }
 }
 
-/// Moves the contents of the `src_dir` into the `dst_dir` and returns meta about all of the
-/// moved files.
+/// Copies/moves the contents of the `src_dir` into the `dst_dir` and returns meta about all of the
+/// moved files. If `copy_op` is true the files are copied, otherwise they're moved
 fn move_into_dir<S, D, P>(
+    copy_op: bool,
     src_dir: S,
     dst_dir: D,
     algorithms: &[DigestAlgorithm],
@@ -257,20 +271,28 @@ where
 
             io::copy(&mut reader, &mut writer).context(IoReadSnafu { path: file.path() })?;
 
+            let relative = file.path().strip_prefix(src_dir).unwrap();
+
             file_meta.push(FileMeta {
-                path: file.path().strip_prefix(src_dir).unwrap().to_path_buf(),
+                path: relative.to_path_buf(),
                 size_bytes: metadata.len(),
                 digests: writer.finalize_hex(),
             });
 
-            let relative = file.path().strip_prefix(src_dir).unwrap();
             let file_dst = dst_dir.join(relative);
 
             fs::create_dir_all(file_dst.parent().unwrap())
                 .context(IoCreateSnafu { path: &file_dst })?;
-            rename(file.path(), file_dst)?;
+
+            if copy_op {
+                copy(file.path(), file_dst)?;
+            } else {
+                rename(file.path(), file_dst)?;
+            }
         } else if file.file_type().is_dir() {
-            dirs.push(file.path().to_path_buf());
+            if !copy_op {
+                dirs.push(file.path().to_path_buf());
+            }
         } else {
             return Err(UnsupportedFile {
                 path: file.path().to_path_buf(),
@@ -387,8 +409,8 @@ fn write_tag_manifests<P: AsRef<Path>>(
     write_manifests(algorithms, file_meta, TAG_MANIFEST_PREFIX, base_dir)
 }
 
-// TODO remember to consider *
-// TODO `\` backslash escaping?
+// TODO remember to consider * when reading
+// TODO note when reading these files that `./data/` is ALLOWED
 fn write_manifests<P: AsRef<Path>>(
     algorithms: &[DigestAlgorithm],
     file_meta: &[FileMeta],
@@ -418,7 +440,6 @@ fn write_manifests<P: AsRef<Path>>(
             let manifest = manifests
                 .get_mut(algorithm)
                 .expect("Missing expected file digest");
-            // TODO note when reading these files that `./data/` is ALLOWED
             writeln!(manifest, "{digest}  {path}").context(IoGeneralSnafu {})?;
         }
     }
@@ -431,6 +452,15 @@ fn rename<F: AsRef<Path>, T: AsRef<Path>>(from: F, to: T) -> Result<()> {
     let to = to.as_ref();
     info!("Moving {} to {}", from.display(), to.display());
     fs::rename(from, to).context(IoMoveSnafu { from, to })
+}
+
+fn copy<F: AsRef<Path>, T: AsRef<Path>>(from: F, to: T) -> Result<()> {
+    let from = from.as_ref();
+    let to = to.as_ref();
+    info!("Copying {} to {}", from.display(), to.display());
+    fs::copy(from, to)
+        .map(|_| ())
+        .context(IoCopySnafu { from, to })
 }
 
 /// Deletes all payload manifests in the base directory

@@ -1,4 +1,5 @@
 use crate::bagit::bag::BagItVersion;
+use crate::bagit::DigestAlgorithm;
 use once_cell::sync::Lazy;
 use regex::Regex;
 
@@ -17,6 +18,8 @@ pub const BUF_SIZE: usize = 8 * 1024;
 
 pub const BAGIT_1_0: BagItVersion = BagItVersion::new(1, 0);
 pub const BAGIT_DEFAULT_VERSION: BagItVersion = BAGIT_1_0;
+
+pub const DEFAULT_ALGORITHM: DigestAlgorithm = DigestAlgorithm::Sha512;
 
 pub const UTF_8: &str = "UTF-8";
 

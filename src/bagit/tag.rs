@@ -16,10 +16,6 @@ use crate::bagit::Error::*;
 #[derive(Debug)]
 pub struct BagDeclaration {
     version: BagItVersion,
-    // TODO figure out how to handle non-utf-8 encodings
-    // https://crates.io/crates/encoding_rs
-    // https://crates.io/crates/encoding_rs_io
-    // Encoding will always be UTF-8 when creating, but it could be different when reading
     encoding: String,
 }
 
@@ -333,13 +329,15 @@ fn read_tag_file<P: AsRef<Path>>(path: P) -> Result<TagList> {
     ));
 
     let mut tags = TagList::new();
-    let mut line_count: u32 = 0;
+    let mut tag_num: u32 = 0;
 
     // TODO this only works for UTF-8
+    // https://crates.io/crates/encoding_rs
+    // https://crates.io/crates/encoding_rs_io
     // TODO how should empty lines be handled?
     for line in reader {
         let line = line?;
-        line_count += 1;
+        tag_num += 1;
 
         match parse_tag_line(&line) {
             Ok(tag) => tags.add(tag),
@@ -347,21 +345,21 @@ fn read_tag_file<P: AsRef<Path>>(path: P) -> Result<TagList> {
                 return Err(InvalidTagLineWithRef {
                     details,
                     path: path.into(),
-                    num: line_count,
+                    num: tag_num,
                 })
             }
             Err(InvalidTagLine { details }) => {
                 return Err(InvalidTagLineWithRef {
                     details,
                     path: path.into(),
-                    num: line_count,
+                    num: tag_num,
                 })
             }
             Err(e) => {
                 return Err(InvalidTagLineWithRef {
                     details: e.to_string(),
                     path: path.into(),
-                    num: line_count,
+                    num: tag_num,
                 })
             }
         }

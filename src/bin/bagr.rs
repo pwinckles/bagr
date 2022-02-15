@@ -13,12 +13,6 @@ use log::{error, info, LevelFilter};
 #[clap(name = "bagr", author = "Peter Winckles <pwinckles@pm.me>", version)]
 #[clap(setting(UseLongFormatForHelpSubcommand))]
 pub struct BagrArgs {
-    /// Absolute or relative path to the bag's base directory
-    ///
-    /// By default, this is the current directory.
-    #[clap(short, long, value_name = "BAG_PATH")]
-    pub bag_path: Option<PathBuf>,
-
     /// Suppress error messages and other command specific logging
     #[clap(short, long)]
     pub quiet: bool,
@@ -46,11 +40,30 @@ pub enum Command {
 
 /// Create a new bag
 #[derive(Args, Debug)]
-pub struct BagCmd {}
+pub struct BagCmd {
+    /// Absolute or relative path to the new bag's base directory
+    ///
+    /// By default, this is the current directory.
+    #[clap(short, long, value_name = "DST_DIR")]
+    pub destination: Option<PathBuf>,
+
+    /// Absolute or relative path to the directory containing the files to add to the bag
+    ///
+    /// Specify this option to create a bag by copying files from a directory into a bag in
+    /// a different directory. By default, bags are created in place.
+    #[clap(short, long, value_name = "SRC_DIR")]
+    pub source: Option<PathBuf>,
+}
 
 /// Update BagIt manifests to match the current state on disk
 #[derive(Args, Debug)]
-pub struct RebagCmd {}
+pub struct RebagCmd {
+    /// Absolute or relative path to the bag's base directory
+    ///
+    /// By default, this is the current directory.
+    #[clap(short, long, value_name = "BAG_PATH")]
+    pub bag_path: Option<PathBuf>,
+}
 
 fn main() {
     let mut args = BagrArgs::parse();
@@ -77,15 +90,19 @@ fn main() {
 
     // TODO
     match args.command {
-        Command::Bag(_) => {
+        Command::Bag(sub_args) => {
             let algorithms = &[DigestAlgorithm::Md5, DigestAlgorithm::Sha256];
 
-            if let Err(e) = create_bag(".", algorithms) {
+            if let Err(e) = create_bag(
+                defaulted_path(sub_args.source),
+                defaulted_path(sub_args.destination),
+                algorithms,
+            ) {
                 error!("Failed to create bag: {}", e);
                 exit(1);
             }
         }
-        Command::Rebag(_) => match open_bag(".") {
+        Command::Rebag(sub_args) => match open_bag(defaulted_path(sub_args.bag_path)) {
             Ok(bag) => {
                 info!("Opened bag: {:?}", bag);
 
@@ -100,4 +117,8 @@ fn main() {
             }
         },
     }
+}
+
+fn defaulted_path(path: Option<PathBuf>) -> PathBuf {
+    path.unwrap_or_else(|| PathBuf::from("."))
 }
