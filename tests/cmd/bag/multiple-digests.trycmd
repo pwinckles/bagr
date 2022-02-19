@@ -1,0 +1,4 @@
+```
+$ bagr bag --bagging-date 2022-02-16 --digest-algorithm md5 --digest-algorithm blake2b256
+? 0
+```
