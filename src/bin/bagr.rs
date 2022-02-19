@@ -1,9 +1,9 @@
 use std::path::PathBuf;
 use std::process::exit;
 
-use bagr::bagit::{create_bag, open_bag, BagInfo, DigestAlgorithm};
+use bagr::bagit::{create_bag, open_bag, BagInfo, DigestAlgorithm as BagItDigestAlgorithm};
 use clap::AppSettings::UseLongFormatForHelpSubcommand;
-use clap::{Args, Parser, Subcommand};
+use clap::{ArgEnum, Args, Parser, Subcommand};
 use log::{error, info, LevelFilter};
 
 // TODO expand docs
@@ -54,7 +54,21 @@ pub struct BagCmd {
     #[clap(short, long, value_name = "SRC_DIR")]
     pub source: Option<PathBuf>,
 
-    /// Set the Bagging-Date tag
+    /// Digest algorithms to use when creating manifest files.
+    ///
+    /// A manifest is created for each algorithm that's specified
+    #[clap(
+        arg_enum,
+        short = 'a',
+        long,
+        value_name = "ALGORITHM",
+        default_value = "sha512",
+        ignore_case = true,
+        multiple_occurrences = true
+    )]
+    pub digest_algorithm: Vec<DigestAlgorithm>,
+
+    /// Value of Bagging-Date tag in bag-info.txt
     ///
     /// Defaults to the current date. Should be in YYYY-MM-DD format.
     #[clap(long, value_name = "YYYY-MM-DD")]
@@ -69,6 +83,29 @@ pub struct RebagCmd {
     /// By default, this is the current directory.
     #[clap(short, long, value_name = "BAG_PATH")]
     pub bag_path: Option<PathBuf>,
+}
+
+#[derive(ArgEnum, Debug, Clone, Copy)]
+pub enum DigestAlgorithm {
+    Md5,
+    Sha1,
+    Sha256,
+    Sha512,
+    Blake2b256,
+    Blake2b512,
+}
+
+impl From<DigestAlgorithm> for BagItDigestAlgorithm {
+    fn from(algorithm: DigestAlgorithm) -> Self {
+        match algorithm {
+            DigestAlgorithm::Md5 => BagItDigestAlgorithm::Md5,
+            DigestAlgorithm::Sha1 => BagItDigestAlgorithm::Sha1,
+            DigestAlgorithm::Sha256 => BagItDigestAlgorithm::Sha256,
+            DigestAlgorithm::Sha512 => BagItDigestAlgorithm::Sha512,
+            DigestAlgorithm::Blake2b256 => BagItDigestAlgorithm::Blake2b256,
+            DigestAlgorithm::Blake2b512 => BagItDigestAlgorithm::Blake2b512,
+        }
+    }
 }
 
 fn main() {
@@ -97,8 +134,6 @@ fn main() {
     // TODO
     match args.command {
         Command::Bag(sub_args) => {
-            let algorithms = &[DigestAlgorithm::Md5, DigestAlgorithm::Sha256];
-
             let mut bag_info = BagInfo::new();
 
             if let Some(date) = sub_args.bagging_date {
@@ -110,7 +145,11 @@ fn main() {
                 defaulted_path(sub_args.source),
                 defaulted_path(sub_args.destination),
                 bag_info,
-                algorithms,
+                &sub_args
+                    .digest_algorithm
+                    .into_iter()
+                    .map(|e| e.into())
+                    .collect::<Vec<BagItDigestAlgorithm>>(),
             ) {
                 error!("Failed to create bag: {}", e);
                 exit(1);

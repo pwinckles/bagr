@@ -20,7 +20,7 @@ use crate::bagit::error::*;
 type Blake2b256 = Blake2b<U32>;
 
 /// Enum of all supported digest algorithms
-#[derive(Debug, Hash, Eq, PartialEq, Copy, Clone, EnumString, EnumDisplay)]
+#[derive(Debug, Hash, Eq, PartialEq, Ord, PartialOrd, Copy, Clone, EnumString, EnumDisplay)]
 pub enum DigestAlgorithm {
     #[strum(serialize = "md5")]
     Md5,

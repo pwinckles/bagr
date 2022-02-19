@@ -73,12 +73,7 @@ pub fn create_bag<S: AsRef<Path>, D: AsRef<Path>>(
     info!("Creating bag in {}", dst_dir.display());
 
     let in_place = src_dir == dst_dir;
-
-    let algorithms = if algorithms.is_empty() {
-        &[DEFAULT_ALGORITHM]
-    } else {
-        algorithms
-    };
+    let algorithms = defaulted_algorithms(algorithms);
 
     if !in_place {
         fs::create_dir_all(dst_dir).context(IoCreateSnafu { path: dst_dir })?;
@@ -89,7 +84,7 @@ pub fn create_bag<S: AsRef<Path>, D: AsRef<Path>>(
 
     fs::create_dir(&temp_dir).context(IoCreateSnafu { path: &temp_dir })?;
 
-    let mut payload_meta = move_into_dir(!in_place, &src_dir, &temp_dir, algorithms, |f| {
+    let mut payload_meta = move_into_dir(!in_place, &src_dir, &temp_dir, &algorithms, |f| {
         f.file_name() != temp_name.as_str()
     })?;
 
@@ -97,7 +92,7 @@ pub fn create_bag<S: AsRef<Path>, D: AsRef<Path>>(
     rename(temp_dir, &data_dir)?;
 
     add_data_prefix(&mut payload_meta);
-    write_payload_manifests(algorithms, &mut payload_meta, dst_dir)?;
+    write_payload_manifests(&algorithms, &mut payload_meta, dst_dir)?;
 
     let declaration = BagDeclaration::new();
     write_bag_declaration(&declaration, dst_dir)?;
@@ -110,14 +105,9 @@ pub fn create_bag<S: AsRef<Path>, D: AsRef<Path>>(
 
     write_bag_info(&bag_info, dst_dir)?;
 
-    update_tag_manifests(dst_dir, algorithms)?;
+    update_tag_manifests(dst_dir, &algorithms)?;
 
-    Ok(Bag::new(
-        dst_dir,
-        declaration,
-        bag_info,
-        algorithms.to_vec(),
-    ))
+    Ok(Bag::new(dst_dir, declaration, bag_info, algorithms))
 }
 
 /// Opens a BagIt bag in that already exists in the specified directory
@@ -532,6 +522,19 @@ where
     }
 
     Ok(())
+}
+
+/// If the input is empty a new vec with the default algorithm is returned. Otherwise, the input
+/// is deduped and a new vec is returned.
+fn defaulted_algorithms(algorithms: &[DigestAlgorithm]) -> Vec<DigestAlgorithm> {
+    if algorithms.is_empty() {
+        vec![DEFAULT_ALGORITHM]
+    } else {
+        let mut new = Vec::from(algorithms);
+        new.sort();
+        new.dedup();
+        new
+    }
 }
 
 fn build_payload_oxum(file_meta: &[FileMeta]) -> String {
