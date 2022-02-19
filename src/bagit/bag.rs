@@ -64,6 +64,7 @@ struct FileMeta {
 pub fn create_bag<S: AsRef<Path>, D: AsRef<Path>>(
     src_dir: S,
     dst_dir: D,
+    mut bag_info: BagInfo,
     algorithms: &[DigestAlgorithm],
 ) -> Result<Bag> {
     let src_dir = src_dir.as_ref();
@@ -96,12 +97,16 @@ pub fn create_bag<S: AsRef<Path>, D: AsRef<Path>>(
     rename(temp_dir, &data_dir)?;
 
     add_data_prefix(&mut payload_meta);
-    write_payload_manifests(algorithms, &payload_meta, dst_dir)?;
+    write_payload_manifests(algorithms, &mut payload_meta, dst_dir)?;
 
     let declaration = BagDeclaration::new();
     write_bag_declaration(&declaration, dst_dir)?;
 
-    let bag_info = BagInfo::with_generated(current_date_str(), build_payload_oxum(&payload_meta))?;
+    if bag_info.bagging_date().is_none() {
+        bag_info.add_bagging_date(current_date_str())?;
+    }
+
+    bag_info.add_payload_oxum(build_payload_oxum(&payload_meta))?;
 
     write_bag_info(&bag_info, dst_dir)?;
 
@@ -327,7 +332,7 @@ fn update_payload_manifests<P: AsRef<Path>>(
     let mut meta = calculate_digests(base_dir.join(DATA), algorithms, |_| true)?;
     add_data_prefix(&mut meta);
 
-    write_payload_manifests(algorithms, &meta, base_dir)?;
+    write_payload_manifests(algorithms, &mut meta, base_dir)?;
 
     Ok(meta)
 }
@@ -344,7 +349,7 @@ fn add_data_prefix(file_meta: &mut [FileMeta]) {
 /// Calculates the digests for all of the tag files in the bag and writes the tag manifests
 fn update_tag_manifests<P: AsRef<Path>>(base_dir: P, algorithms: &[DigestAlgorithm]) -> Result<()> {
     let base_dir = base_dir.as_ref();
-    let meta = calculate_digests(base_dir, algorithms, |f| {
+    let mut meta = calculate_digests(base_dir, algorithms, |f| {
         // Skip the data directory and all tag manifests
         f.file_name() != DATA
             && f.file_name()
@@ -352,7 +357,7 @@ fn update_tag_manifests<P: AsRef<Path>>(base_dir: P, algorithms: &[DigestAlgorit
                 .map(|n| !TAG_MANIFEST_MATCHER.is_match(n))
                 .unwrap_or(true)
     })?;
-    write_tag_manifests(algorithms, &meta, base_dir)
+    write_tag_manifests(algorithms, &mut meta, base_dir)
 }
 
 /// Calculates the digests for all of the files under the `base_dir`
@@ -394,7 +399,7 @@ where
 
 fn write_payload_manifests<P: AsRef<Path>>(
     algorithms: &[DigestAlgorithm],
-    file_meta: &[FileMeta],
+    file_meta: &mut [FileMeta],
     base_dir: P,
 ) -> Result<()> {
     // TODO this is currently not taking into account fetch.txt
@@ -403,7 +408,7 @@ fn write_payload_manifests<P: AsRef<Path>>(
 
 fn write_tag_manifests<P: AsRef<Path>>(
     algorithms: &[DigestAlgorithm],
-    file_meta: &[FileMeta],
+    file_meta: &mut [FileMeta],
     base_dir: P,
 ) -> Result<()> {
     write_manifests(algorithms, file_meta, TAG_MANIFEST_PREFIX, base_dir)
@@ -413,7 +418,7 @@ fn write_tag_manifests<P: AsRef<Path>>(
 // TODO note when reading these files that `./data/` is ALLOWED
 fn write_manifests<P: AsRef<Path>>(
     algorithms: &[DigestAlgorithm],
-    file_meta: &[FileMeta],
+    file_meta: &mut [FileMeta],
     prefix: &str,
     base_dir: P,
 ) -> Result<()> {
@@ -427,6 +432,9 @@ fn write_manifests<P: AsRef<Path>>(
         let file = File::create(&manifest).context(IoCreateSnafu { path: manifest })?;
         manifests.insert(algorithm, BufWriter::new(file));
     }
+
+    // Sort files so that they're written to the manifest deterministically
+    file_meta.sort_by(|a, b| a.path.cmp(&b.path));
 
     for meta in file_meta {
         // TODO LF, CR, and % must be % encoded -- however! existing clients do NOT do this!

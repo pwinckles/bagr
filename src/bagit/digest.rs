@@ -279,7 +279,6 @@ mod tests {
 
     use crate::bagit::digest::DigestAlgorithm;
     use crate::bagit::digest::MultiDigestWriter;
-    use crate::bagit::error::*;
 
     #[test]
     fn calculate_digest_while_reading() {

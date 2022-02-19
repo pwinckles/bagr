@@ -1,0 +1,2 @@
+4349cfeff8e2eb74dffc369bb5fd084e  data/dir/file2.txt
+e243bb39c844b3543a7726576c869caf  data/file1.txt

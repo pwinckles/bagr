@@ -43,9 +43,11 @@ sha2 = "0.10"
 # CLI
 clap = { version = "3", features = ["derive"] }
 ansi_term = "0.12"
-ctrlc = "3"
 atty = "0.2"
 
 # Logging
 log = "0.4"
 env_logger = "0.9"
+
+[dev-dependencies]
+trycmd = "0.12"

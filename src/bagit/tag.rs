@@ -143,17 +143,6 @@ impl BagInfo {
         }
     }
 
-    pub fn with_generated<D: AsRef<str>, O: AsRef<str>>(
-        bagging_date: D,
-        payload_oxum: O,
-    ) -> Result<Self> {
-        let mut info = Self::with_capacity(2);
-        info.add_bagging_date(bagging_date)?;
-        info.add_payload_oxum(payload_oxum)?;
-        // TODO add bagging agent
-        Ok(info)
-    }
-
     pub fn with_tags(tags: TagList) -> Self {
         Self { tags }
     }
@@ -163,9 +152,21 @@ impl BagInfo {
         self.tags.add_tag(LABEL_BAGGING_DATE, value)
     }
 
+    pub fn bagging_date(&self) -> Option<&str> {
+        self.tags
+            .get_tag(LABEL_BAGGING_DATE)
+            .map(|t| t.value.as_ref())
+    }
+
     pub fn add_payload_oxum<S: AsRef<str>>(&mut self, value: S) -> Result<()> {
         self.tags.remove_tags(LABEL_PAYLOAD_OXUM);
         self.tags.add_tag(LABEL_PAYLOAD_OXUM, value)
+    }
+
+    pub fn payload_oxum(&self) -> Option<&str> {
+        self.tags
+            .get_tag(LABEL_PAYLOAD_OXUM)
+            .map(|t| t.value.as_ref())
     }
 }
 

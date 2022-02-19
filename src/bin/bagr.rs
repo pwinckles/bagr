@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::process::exit;
 
-use bagr::bagit::{create_bag, open_bag, DigestAlgorithm};
+use bagr::bagit::{create_bag, open_bag, BagInfo, DigestAlgorithm};
 use clap::AppSettings::UseLongFormatForHelpSubcommand;
 use clap::{Args, Parser, Subcommand};
 use log::{error, info, LevelFilter};
@@ -53,6 +53,12 @@ pub struct BagCmd {
     /// a different directory. By default, bags are created in place.
     #[clap(short, long, value_name = "SRC_DIR")]
     pub source: Option<PathBuf>,
+
+    /// Set the Bagging-Date tag
+    ///
+    /// Defaults to the current date. Should be in YYYY-MM-DD format.
+    #[clap(long, value_name = "YYYY-MM-DD")]
+    pub bagging_date: Option<String>,
 }
 
 /// Update BagIt manifests to match the current state on disk
@@ -93,9 +99,17 @@ fn main() {
         Command::Bag(sub_args) => {
             let algorithms = &[DigestAlgorithm::Md5, DigestAlgorithm::Sha256];
 
+            let mut bag_info = BagInfo::new();
+
+            if let Some(date) = sub_args.bagging_date {
+                // TODO error
+                bag_info.add_bagging_date(date).unwrap();
+            }
+
             if let Err(e) = create_bag(
                 defaulted_path(sub_args.source),
                 defaulted_path(sub_args.destination),
+                bag_info,
                 algorithms,
             ) {
                 error!("Failed to create bag: {}", e);
