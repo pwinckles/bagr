@@ -101,6 +101,7 @@ pub fn create_bag<S: AsRef<Path>, D: AsRef<Path>>(
         bag_info.add_bagging_date(current_date_str())?;
     }
 
+    bag_info.add_software_agent(bagr_software_agent())?;
     bag_info.add_payload_oxum(build_payload_oxum(&payload_meta))?;
 
     write_bag_info(&bag_info, dst_dir)?;
@@ -214,7 +215,9 @@ impl BagUpdater {
         let algorithms = &self.bag.algorithms;
 
         // TODO should updating these values keep the original position?
+        // TODO need an option of overriding this
         self.bag.bag_info.add_bagging_date(current_date_str())?;
+        self.bag.bag_info.add_software_agent(bagr_software_agent())?;
 
         if self.recalculate_payload_manifests {
             delete_payload_manifests(base_dir)?;
@@ -544,6 +547,10 @@ fn build_payload_oxum(file_meta: &[FileMeta]) -> String {
         sum += meta.size_bytes;
     }
     format!("{sum}.{count}")
+}
+
+fn bagr_software_agent() -> String {
+    format!("bagr v{} <{}>", BAGR_VERSION, BAGR_SRC_URL)
 }
 
 fn current_date_str() -> String {

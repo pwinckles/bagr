@@ -16,6 +16,9 @@ pub const CR_B: u8 = b'\r';
 pub const LF_B: u8 = b'\n';
 pub const BUF_SIZE: usize = 8 * 1024;
 
+pub const BAGR_VERSION: &str = env!("CARGO_PKG_VERSION");
+pub const BAGR_SRC_URL: &str = "https://github.com/pwinckles/bagr";
+
 pub const BAGIT_1_0: BagItVersion = BagItVersion::new(1, 0);
 pub const BAGIT_DEFAULT_VERSION: BagItVersion = BAGIT_1_0;
 
@@ -38,3 +41,4 @@ pub const LABEL_FILE_ENCODING: &str = "Tag-File-Character-Encoding";
 // bag-info.txt reserved labels
 pub const LABEL_BAGGING_DATE: &str = "Bagging-Date";
 pub const LABEL_PAYLOAD_OXUM: &str = "Payload-Oxum";
+pub const LABEL_SOFTWARE_AGENT: &str = "Bag-Software-Agent";

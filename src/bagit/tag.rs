@@ -148,25 +148,55 @@ impl BagInfo {
     }
 
     pub fn add_bagging_date<S: AsRef<str>>(&mut self, value: S) -> Result<()> {
-        self.tags.remove_tags(LABEL_BAGGING_DATE);
-        self.tags.add_tag(LABEL_BAGGING_DATE, value)
+        self.add_single(LABEL_BAGGING_DATE, value)
     }
 
     pub fn bagging_date(&self) -> Option<&str> {
-        self.tags
-            .get_tag(LABEL_BAGGING_DATE)
-            .map(|t| t.value.as_ref())
+        self.get_tag(LABEL_BAGGING_DATE).map(|t| t.value.as_ref())
     }
 
     pub fn add_payload_oxum<S: AsRef<str>>(&mut self, value: S) -> Result<()> {
-        self.tags.remove_tags(LABEL_PAYLOAD_OXUM);
-        self.tags.add_tag(LABEL_PAYLOAD_OXUM, value)
+        self.add_single(LABEL_PAYLOAD_OXUM, value)
     }
 
     pub fn payload_oxum(&self) -> Option<&str> {
-        self.tags
-            .get_tag(LABEL_PAYLOAD_OXUM)
-            .map(|t| t.value.as_ref())
+        self.get_tag(LABEL_PAYLOAD_OXUM).map(|t| t.value.as_ref())
+    }
+
+    pub fn add_software_agent<S: AsRef<str>>(&mut self, value: S) -> Result<()> {
+        self.add_single(LABEL_SOFTWARE_AGENT, value)
+    }
+
+    pub fn software_agent(&self) -> Option<&str> {
+        self.get_tag(LABEL_SOFTWARE_AGENT).map(|t| t.value.as_ref())
+    }
+
+    /// Adds a new tag by first removing all existing tags with the same label.
+    pub fn add_single<L: AsRef<str>, S: AsRef<str>>(&mut self, label: L, value: S) -> Result<()> {
+        let label = label.as_ref();
+        self.tags.remove_tags(label);
+        self.tags.add_tag(label, value)
+    }
+
+    /// Adds a new tag but does not remove any existing tags with the same label
+    pub fn add_repeatable<L: AsRef<str>, S: AsRef<str>>(
+        &mut self,
+        label: L,
+        value: S,
+    ) -> Result<()> {
+        let label = label.as_ref();
+        self.tags.add_tag(label, value)
+    }
+
+    /// Returns the first tag that's found that matches the specified label.
+    /// Labels are case insensitive.
+    pub fn get_tag<L: AsRef<str>>(&self, label: L) -> Option<&Tag> {
+        self.tags.get_tag(label.as_ref())
+    }
+
+    /// Returns all of the tags that match the specified label. Labels are case insensitive.
+    pub fn get_tags<L: AsRef<str>>(&self, label: L) -> Vec<&Tag> {
+        self.tags.get_tags(label)
     }
 }
 
