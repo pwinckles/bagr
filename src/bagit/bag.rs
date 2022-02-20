@@ -438,7 +438,7 @@ fn write_manifests<P: AsRef<Path>>(
             path: meta.path.to_path_buf(),
         })?;
         let encoded = percent_encode(path);
-        
+
         for algorithm in algorithms {
             let digest = meta
                 .digests

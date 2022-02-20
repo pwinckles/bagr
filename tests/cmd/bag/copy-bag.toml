@@ -1,0 +1,5 @@
+fs.sandbox = true
+fs.base = "copy-bag.in"
+
+bin.name = "bagr"
+args = "bag --source bag --destination bag-dst --bagging-date 2022-02-16 --digest-algorithm sha256"
