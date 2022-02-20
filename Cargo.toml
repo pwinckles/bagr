@@ -16,14 +16,12 @@ path = "src/bin/bagr.rs"
 
 [dependencies]
 # General
+chrono = "0.4"
 once_cell = "1"
 regex = "1"
 
 # Errors
 snafu = "0.7"
-
-# Time
-chrono = "0.4"
 
 # Enum features
 strum = "0.23"

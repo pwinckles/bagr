@@ -76,4 +76,6 @@ pub enum Error {
     UnsupportedEncoding { encoding: String },
     #[snafu(display("Failed to decode string: {source}"))]
     InvalidString { source: FromUtf8Error },
+    #[snafu(display("Path cannot be encoded as UTF-8: {}", path.display()))]
+    InvalidUtf8Path { path: PathBuf },
 }

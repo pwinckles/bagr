@@ -1,0 +1,5 @@
+fs.sandbox = true
+fs.base = "manifest-encoding.in"
+
+bin.name = "bagr"
+args = "bag --bagging-date 2022-02-16 --digest-algorithm sha256"

@@ -15,6 +15,7 @@ use snafu::ResultExt;
 use walkdir::{DirEntry, WalkDir};
 
 use crate::bagit::consts::*;
+use crate::bagit::encoding::percent_encode;
 use crate::bagit::error::Error::*;
 use crate::bagit::error::*;
 use crate::bagit::tag::{
@@ -217,7 +218,9 @@ impl BagUpdater {
         // TODO should updating these values keep the original position?
         // TODO need an option of overriding this
         self.bag.bag_info.add_bagging_date(current_date_str())?;
-        self.bag.bag_info.add_software_agent(bagr_software_agent())?;
+        self.bag
+            .bag_info
+            .add_software_agent(bagr_software_agent())?;
 
         if self.recalculate_payload_manifests {
             delete_payload_manifests(base_dir)?;
@@ -430,9 +433,12 @@ fn write_manifests<P: AsRef<Path>>(
     file_meta.sort_by(|a, b| a.path.cmp(&b.path));
 
     for meta in file_meta {
-        // TODO LF, CR, and % must be % encoded -- however! existing clients do NOT do this!
         // TODO on windows, `\` must be converted to `/`
-        let path = meta.path.display();
+        let path = meta.path.to_str().ok_or_else(|| InvalidUtf8Path {
+            path: meta.path.to_path_buf(),
+        })?;
+        let encoded = percent_encode(path);
+        
         for algorithm in algorithms {
             let digest = meta
                 .digests
@@ -441,7 +447,7 @@ fn write_manifests<P: AsRef<Path>>(
             let manifest = manifests
                 .get_mut(algorithm)
                 .expect("Missing expected file digest");
-            writeln!(manifest, "{digest}  {path}").context(IoGeneralSnafu {})?;
+            writeln!(manifest, "{digest}  {encoded}").context(IoGeneralSnafu {})?;
         }
     }
 

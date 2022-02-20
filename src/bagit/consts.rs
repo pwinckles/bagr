@@ -8,14 +8,6 @@ pub static PAYLOAD_MANIFEST_MATCHER: Lazy<Regex> =
 pub static TAG_MANIFEST_MATCHER: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"^tagmanifest-([[:alnum:]]+)\.txt$").unwrap());
 
-pub const CR: char = '\r';
-pub const LF: char = '\n';
-pub const TAB: char = '\t';
-pub const SPACE: char = ' ';
-pub const CR_B: u8 = b'\r';
-pub const LF_B: u8 = b'\n';
-pub const BUF_SIZE: usize = 8 * 1024;
-
 pub const BAGR_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const BAGR_SRC_URL: &str = "https://github.com/pwinckles/bagr";
 
@@ -25,6 +17,14 @@ pub const BAGIT_DEFAULT_VERSION: BagItVersion = BAGIT_1_0;
 pub const DEFAULT_ALGORITHM: DigestAlgorithm = DigestAlgorithm::Sha512;
 
 pub const UTF_8: &str = "UTF-8";
+
+pub const CR: char = '\r';
+pub const LF: char = '\n';
+pub const TAB: char = '\t';
+pub const SPACE: char = ' ';
+pub const CR_B: u8 = b'\r';
+pub const LF_B: u8 = b'\n';
+pub const BUF_SIZE: usize = 8 * 1024;
 
 // Filenames
 pub const BAGIT_TXT: &str = "bagit.txt";

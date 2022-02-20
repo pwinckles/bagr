@@ -6,6 +6,7 @@ pub use crate::bagit::tag::{BagDeclaration, BagInfo};
 mod bag;
 mod consts;
 mod digest;
+mod encoding;
 mod error;
 mod io;
 mod tag;
