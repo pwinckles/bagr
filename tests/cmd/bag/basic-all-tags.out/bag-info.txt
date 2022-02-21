@@ -1,0 +1,27 @@
+Bagging-Date: 2022-02-16
+Bag-Software-Agent: custom-agent
+Bag-Group-Identifier: grp-id
+Bag-Count: 1 of 2
+Bag-Size: 2MB
+Source-Organization: org1
+Source-Organization: org2
+Organization-Address: org-addr1
+Organization-Address: org-addr2
+Contact-Name: person1
+Contact-Name: person2
+Contact-Phone: phone1
+Contact-Phone: phone2
+Contact-Email: email1
+Contact-Email: email2
+External-Description: ext-desc-1
+External-Description: ext-desc-2
+External-Identifier: ext-id-1
+External-Identifier: ext-id-2
+Internal-Sender-Description: int-desc-1
+Internal-Sender-Description: int-desc-2
+Internal-Sender-Identifier: int-id1
+Internal-Sender-Identifier: int-id2
+custom-1: value-1
+custom-2: value-2
+custom-2: value-3
+Payload-Oxum: 14.2

@@ -42,3 +42,35 @@ pub const LABEL_FILE_ENCODING: &str = "Tag-File-Character-Encoding";
 pub const LABEL_BAGGING_DATE: &str = "Bagging-Date";
 pub const LABEL_PAYLOAD_OXUM: &str = "Payload-Oxum";
 pub const LABEL_SOFTWARE_AGENT: &str = "Bag-Software-Agent";
+pub const LABEL_SOURCE_ORGANIZATION: &str = "Source-Organization";
+pub const LABEL_ORGANIZATION_ADDRESS: &str = "Organization-Address";
+pub const LABEL_CONTACT_NAME: &str = "Contact-Name";
+pub const LABEL_CONTACT_PHONE: &str = "Contact-Phone";
+pub const LABEL_CONTACT_EMAIL: &str = "Contact-Email";
+pub const LABEL_EXTERNAL_DESCRIPTION: &str = "External-Description";
+pub const LABEL_EXTERNAL_IDENTIFIER: &str = "External-Identifier";
+pub const LABEL_BAG_SIZE: &str = "Bag-Size";
+pub const LABEL_BAG_GROUP_IDENTIFIER: &str = "Bag-Group-Identifier";
+pub const LABEL_BAG_COUNT: &str = "Bag-Count";
+pub const LABEL_INTERNAL_SENDER_IDENTIFIER: &str = "Internal-Sender-Identifier";
+pub const LABEL_INTERNAL_SENDER_DESCRIPTION: &str = "Internal-Sender-Description";
+
+/// Lookup table that indicates if a reserved bag-info label is repeatable. All label names are
+/// lowercased here.
+pub const LABEL_REPEATABLE: [(&str, bool); 15] = [
+    ("bagging-date", false),
+    ("payload-oxum", false),
+    ("bag-software-agent", false),
+    ("source-organization", true),
+    ("organization-address", true),
+    ("contact-name", true),
+    ("contact-phone", true),
+    ("contact-email", true),
+    ("external-description", true),
+    ("external-identifier", true),
+    ("bag-size", false),
+    ("bag-group-identifier", false),
+    ("bag-count", false),
+    ("internal-sender-identifier", true),
+    ("internal-sender-description", true),
+];

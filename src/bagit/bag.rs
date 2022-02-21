@@ -71,6 +71,8 @@ pub fn create_bag<S: AsRef<Path>, D: AsRef<Path>>(
     let src_dir = src_dir.as_ref();
     let dst_dir = dst_dir.as_ref();
 
+    // TODO validate that dst is not a child of src
+
     info!("Creating bag in {}", dst_dir.display());
 
     let in_place = src_dir == dst_dir;
@@ -101,8 +103,10 @@ pub fn create_bag<S: AsRef<Path>, D: AsRef<Path>>(
     if bag_info.bagging_date().is_none() {
         bag_info.add_bagging_date(current_date_str())?;
     }
+    if bag_info.software_agent().is_none() {
+        bag_info.add_software_agent(bagr_software_agent())?;
+    }
 
-    bag_info.add_software_agent(bagr_software_agent())?;
     bag_info.add_payload_oxum(build_payload_oxum(&payload_meta))?;
 
     write_bag_info(&bag_info, dst_dir)?;

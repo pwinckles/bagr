@@ -1,0 +1,32 @@
+fs.sandbox = true
+fs.base = "basic-bag.in"
+
+bin.name = "bagr"
+args = """
+bag \
+--bagging-date 2022-02-16 \
+--software-agent custom-agent \
+--bag-size 2MB \
+--bag-group-identifier grp-id \
+--bag-count '1 of 2' \
+--source-organization org1 \
+--source-organization org2 \
+--organization-address org-addr1 \
+--organization-address org-addr2 \
+--contact-name person1 \
+--contact-name person2 \
+--contact-phone phone1 \
+--contact-phone phone2 \
+--contact-email email1 \
+--contact-email email2 \
+--external-description ext-desc-1 \
+--external-description ext-desc-2 \
+--external-identifier ext-id-1 \
+--external-identifier ext-id-2 \
+--internal-sender-identifier int-id1 \
+--internal-sender-identifier int-id2 \
+--internal-sender-description int-desc-1 \
+--internal-sender-description int-desc-2 \
+--tag custom-1:value-1 \
+--tag custom-2:value-2 \
+--tag custom-2:value-3"""

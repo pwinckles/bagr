@@ -1,10 +1,10 @@
-use log::{debug, info};
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Write};
 use std::path::Path;
 use std::slice::Iter;
 use std::vec::IntoIter;
 
+use log::{debug, info};
 use snafu::ResultExt;
 
 use crate::bagit::bag::BagItVersion;
@@ -147,45 +147,20 @@ impl BagInfo {
         Self { tags }
     }
 
-    pub fn add_bagging_date<S: AsRef<str>>(&mut self, value: S) -> Result<()> {
-        self.add_single(LABEL_BAGGING_DATE, value)
-    }
-
-    pub fn bagging_date(&self) -> Option<&str> {
-        self.get_tag(LABEL_BAGGING_DATE).map(|t| t.value.as_ref())
-    }
-
-    pub fn add_payload_oxum<S: AsRef<str>>(&mut self, value: S) -> Result<()> {
-        self.add_single(LABEL_PAYLOAD_OXUM, value)
-    }
-
-    pub fn payload_oxum(&self) -> Option<&str> {
-        self.get_tag(LABEL_PAYLOAD_OXUM).map(|t| t.value.as_ref())
-    }
-
-    pub fn add_software_agent<S: AsRef<str>>(&mut self, value: S) -> Result<()> {
-        self.add_single(LABEL_SOFTWARE_AGENT, value)
-    }
-
-    pub fn software_agent(&self) -> Option<&str> {
-        self.get_tag(LABEL_SOFTWARE_AGENT).map(|t| t.value.as_ref())
-    }
-
-    /// Adds a new tag by first removing all existing tags with the same label.
-    pub fn add_single<L: AsRef<str>, S: AsRef<str>>(&mut self, label: L, value: S) -> Result<()> {
+    pub fn add_tag<L: AsRef<str>, S: AsRef<str>>(&mut self, label: L, value: S) -> Result<()> {
         let label = label.as_ref();
-        self.tags.remove_tags(label);
-        self.tags.add_tag(label, value)
-    }
 
-    /// Adds a new tag but does not remove any existing tags with the same label
-    pub fn add_repeatable<L: AsRef<str>, S: AsRef<str>>(
-        &mut self,
-        label: L,
-        value: S,
-    ) -> Result<()> {
-        let label = label.as_ref();
-        self.tags.add_tag(label, value)
+        let repeatable = LABEL_REPEATABLE
+            .iter()
+            .find(|(reserved_label, _)| reserved_label.eq_ignore_ascii_case(label))
+            .map(|(_, repeatable)| *repeatable)
+            .unwrap_or(true);
+
+        if repeatable {
+            self.add_repeatable(label, value)
+        } else {
+            self.add_non_repeatable(label, value)
+        }
     }
 
     /// Returns the first tag that's found that matches the specified label.
@@ -195,8 +170,145 @@ impl BagInfo {
     }
 
     /// Returns all of the tags that match the specified label. Labels are case insensitive.
-    pub fn get_tags<L: AsRef<str>>(&self, label: L) -> Vec<&Tag> {
-        self.tags.get_tags(label)
+    pub fn get_tags<'a, 'b: 'a>(&'a self, label: &'b str) -> Box<dyn Iterator<Item = &Tag> + 'a> {
+        self.tags.get_tags(label.as_ref())
+    }
+
+    pub fn add_bagging_date<S: AsRef<str>>(&mut self, value: S) -> Result<()> {
+        self.add_non_repeatable(LABEL_BAGGING_DATE, value)
+    }
+
+    pub fn bagging_date(&self) -> Option<&Tag> {
+        self.get_tag(LABEL_BAGGING_DATE)
+    }
+
+    pub fn add_payload_oxum<S: AsRef<str>>(&mut self, value: S) -> Result<()> {
+        self.add_non_repeatable(LABEL_PAYLOAD_OXUM, value)
+    }
+
+    pub fn payload_oxum(&self) -> Option<&Tag> {
+        self.get_tag(LABEL_PAYLOAD_OXUM)
+    }
+
+    pub fn add_software_agent<S: AsRef<str>>(&mut self, value: S) -> Result<()> {
+        self.add_non_repeatable(LABEL_SOFTWARE_AGENT, value)
+    }
+
+    pub fn software_agent(&self) -> Option<&Tag> {
+        self.get_tag(LABEL_SOFTWARE_AGENT)
+    }
+
+    pub fn add_source_organization<S: AsRef<str>>(&mut self, value: S) -> Result<()> {
+        self.add_repeatable(LABEL_SOURCE_ORGANIZATION, value)
+    }
+
+    pub fn source_organization(&self) -> Box<dyn Iterator<Item = &Tag> + '_> {
+        self.get_tags(LABEL_SOURCE_ORGANIZATION)
+    }
+
+    pub fn add_organization_address<S: AsRef<str>>(&mut self, value: S) -> Result<()> {
+        self.add_repeatable(LABEL_ORGANIZATION_ADDRESS, value)
+    }
+
+    pub fn organization_address(&self) -> Box<dyn Iterator<Item = &Tag> + '_> {
+        self.get_tags(LABEL_ORGANIZATION_ADDRESS)
+    }
+
+    pub fn add_contact_name<S: AsRef<str>>(&mut self, value: S) -> Result<()> {
+        self.add_repeatable(LABEL_CONTACT_NAME, value)
+    }
+
+    pub fn contact_name(&self) -> Box<dyn Iterator<Item = &Tag> + '_> {
+        self.get_tags(LABEL_CONTACT_NAME)
+    }
+
+    pub fn add_contact_phone<S: AsRef<str>>(&mut self, value: S) -> Result<()> {
+        self.add_repeatable(LABEL_CONTACT_PHONE, value)
+    }
+
+    pub fn contact_phone(&self) -> Box<dyn Iterator<Item = &Tag> + '_> {
+        self.get_tags(LABEL_CONTACT_PHONE)
+    }
+
+    pub fn add_contact_email<S: AsRef<str>>(&mut self, value: S) -> Result<()> {
+        self.add_repeatable(LABEL_CONTACT_EMAIL, value)
+    }
+
+    pub fn contact_email(&self) -> Box<dyn Iterator<Item = &Tag> + '_> {
+        self.get_tags(LABEL_CONTACT_EMAIL)
+    }
+
+    pub fn add_external_description<S: AsRef<str>>(&mut self, value: S) -> Result<()> {
+        self.add_repeatable(LABEL_EXTERNAL_DESCRIPTION, value)
+    }
+
+    pub fn external_description(&self) -> Box<dyn Iterator<Item = &Tag> + '_> {
+        self.get_tags(LABEL_EXTERNAL_DESCRIPTION)
+    }
+
+    pub fn add_external_identifier<S: AsRef<str>>(&mut self, value: S) -> Result<()> {
+        self.add_repeatable(LABEL_EXTERNAL_IDENTIFIER, value)
+    }
+
+    pub fn external_identifier(&self) -> Box<dyn Iterator<Item = &Tag> + '_> {
+        self.get_tags(LABEL_EXTERNAL_IDENTIFIER)
+    }
+
+    pub fn add_bag_size<S: AsRef<str>>(&mut self, value: S) -> Result<()> {
+        self.add_non_repeatable(LABEL_BAG_SIZE, value)
+    }
+
+    pub fn bag_size(&self) -> Option<&Tag> {
+        self.get_tag(LABEL_BAG_SIZE)
+    }
+
+    pub fn add_bag_group_identifier<S: AsRef<str>>(&mut self, value: S) -> Result<()> {
+        self.add_non_repeatable(LABEL_BAG_GROUP_IDENTIFIER, value)
+    }
+
+    pub fn bag_group_identifier(&self) -> Option<&Tag> {
+        self.get_tag(LABEL_BAG_GROUP_IDENTIFIER)
+    }
+
+    pub fn add_bag_count<S: AsRef<str>>(&mut self, value: S) -> Result<()> {
+        self.add_non_repeatable(LABEL_BAG_COUNT, value)
+    }
+
+    pub fn bag_count(&self) -> Option<&Tag> {
+        self.get_tag(LABEL_BAG_COUNT)
+    }
+
+    pub fn add_internal_sender_identifier<S: AsRef<str>>(&mut self, value: S) -> Result<()> {
+        self.add_repeatable(LABEL_INTERNAL_SENDER_IDENTIFIER, value)
+    }
+
+    pub fn internal_sender_identifier(&self) -> Box<dyn Iterator<Item = &Tag> + '_> {
+        self.get_tags(LABEL_INTERNAL_SENDER_IDENTIFIER)
+    }
+
+    pub fn add_internal_sender_description<S: AsRef<str>>(&mut self, value: S) -> Result<()> {
+        self.add_repeatable(LABEL_INTERNAL_SENDER_DESCRIPTION, value)
+    }
+
+    pub fn internal_sender_description(&self) -> Box<dyn Iterator<Item = &Tag> + '_> {
+        self.get_tags(LABEL_INTERNAL_SENDER_DESCRIPTION)
+    }
+
+    /// Adds a new tag by first removing all existing tags with the same label.
+    fn add_non_repeatable<L: AsRef<str>, S: AsRef<str>>(
+        &mut self,
+        label: L,
+        value: S,
+    ) -> Result<()> {
+        let label = label.as_ref();
+        self.tags.remove_tags(label);
+        self.tags.add_tag(label, value)
+    }
+
+    /// Adds a new tag but does not remove any existing tags with the same label
+    fn add_repeatable<L: AsRef<str>, S: AsRef<str>>(&mut self, label: L, value: S) -> Result<()> {
+        let label = label.as_ref();
+        self.tags.add_tag(label, value)
     }
 }
 
@@ -280,12 +392,12 @@ impl TagList {
     }
 
     /// Returns all of the tags with the provided label. It uses a case insensitive match.
-    pub fn get_tags<S: AsRef<str>>(&self, label: S) -> Vec<&Tag> {
-        let label = label.as_ref();
-        self.tags
-            .iter()
-            .filter(|tag| tag.label.eq_ignore_ascii_case(label))
-            .collect()
+    pub fn get_tags<'a, 'b: 'a>(&'a self, label: &'b str) -> Box<dyn Iterator<Item = &Tag> + 'a> {
+        Box::new(
+            self.tags
+                .iter()
+                .filter(|tag| tag.label.eq_ignore_ascii_case(label)),
+        )
     }
 
     /// Returns the first tag with the provided label. It uses a case insensitive match.
@@ -301,7 +413,7 @@ impl TagList {
     }
 
     pub fn add_tag<L: AsRef<str>, V: AsRef<str>>(&mut self, label: L, value: V) -> Result<()> {
-        self.tags.push(Tag::new(label, value)?);
+        self.add(Tag::new(label, value)?);
         Ok(())
     }
 
