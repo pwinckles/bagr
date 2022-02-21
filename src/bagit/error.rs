@@ -8,6 +8,8 @@ pub type Result<T, E = Error> = core::result::Result<T, E>;
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub))]
 pub enum Error {
+    #[snafu(display("{message}"))]
+    General { message: String },
     #[snafu(display("IO error: {}", source))]
     IoGeneral { source: std::io::Error },
     #[snafu(display("Error creating file {}: {}", path.display(), source))]

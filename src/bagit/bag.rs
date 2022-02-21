@@ -71,7 +71,14 @@ pub fn create_bag<S: AsRef<Path>, D: AsRef<Path>>(
     let src_dir = src_dir.as_ref();
     let dst_dir = dst_dir.as_ref();
 
-    // TODO validate that dst is not a child of src
+    // This is not foolproof, but it's good enough
+    if src_dir != dst_dir
+        && (dst_dir.starts_with(src_dir) || (src_dir == Path::new(".") && !dst_dir.has_root()))
+    {
+        return Err(General {
+            message: "The bag destination cannot be a child of the bag source directory".into(),
+        });
+    }
 
     info!("Creating bag in {}", dst_dir.display());
 
