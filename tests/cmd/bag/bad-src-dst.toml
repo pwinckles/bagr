@@ -1,9 +1,0 @@
-fs.sandbox = true
-fs.base = "basic-bag.in"
-
-bin.name = "bagr"
-args = "bag -d dir"
-status = "failed"
-stderr = """
-[ERROR] Failed to create bag: The bag destination cannot be a child of the bag source directory
-"""

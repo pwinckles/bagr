@@ -1,0 +1,5 @@
+fs.sandbox = true
+fs.base = "basic-bag.in"
+
+bin.name = "bagr"
+args = "bag -d dst --bagging-date 2022-02-16 -a sha256"

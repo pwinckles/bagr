@@ -49,16 +49,14 @@ pub enum Command {
 pub struct BagCmd {
     /// Absolute or relative path to the new bag's base directory
     ///
-    /// By default, this is the current directory. The destination cannot be child of the source
-    /// directory.
+    /// By default, this is the current directory.
     #[clap(short, long, value_name = "DST_DIR")]
     pub destination: Option<PathBuf>,
 
     /// Absolute or relative path to the directory containing the files to add to the bag
     ///
     /// Specify this option to create a bag by copying files from a directory into a bag in
-    /// a different directory. By default, bags are created in place. The destination cannot be
-    /// a child of the source directory.
+    /// a different directory. By default, bags are created in place.
     #[clap(short, long, value_name = "SRC_DIR")]
     pub source: Option<PathBuf>,
 
