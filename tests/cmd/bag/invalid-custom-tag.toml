@@ -1,0 +1,9 @@
+fs.sandbox = true
+fs.base = "basic-bag.in"
+
+bin.name = "bagr"
+args = "bag --tag labelvalue"
+status = "failed"
+stderr = """
+[ERROR] Failed to create bag: Invalid tag line: Label and value must be separated by a ':'. Found: labelvalue
+"""

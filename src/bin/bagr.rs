@@ -274,8 +274,6 @@ fn bag_cmd(sub_args: BagCmd) -> Result<Bag> {
         bag_info.add_tag(split.0.trim(), split.1.trim())?;
     }
 
-    // TODO test for invalid custom tags
-
     create_bag(
         defaulted_path(sub_args.source),
         defaulted_path(sub_args.destination),
