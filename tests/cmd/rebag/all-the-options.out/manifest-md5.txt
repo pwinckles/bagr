@@ -1,0 +1,3 @@
+4349cfeff8e2eb74dffc369bb5fd084e  data/dir/file2.txt
+18519bfbd592b4e6cb238c5ccdbc209f  data/dir2/file3.txt
+33ef2dc68bf2a81c18b7ed096ebc36ae  data/file1.txt

@@ -1,0 +1,4 @@
+Custom-Tag: some value
+Bagging-Date: 2022-02-17
+Bag-Software-Agent: different-agent
+Payload-Oxum: 32.3

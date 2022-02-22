@@ -147,6 +147,33 @@ pub struct RebagCmd {
     /// By default, this is the current directory.
     #[clap(short, long, value_name = "BAG_PATH")]
     pub bag_path: Option<PathBuf>,
+
+    /// Digest algorithms to use when creating manifest files.
+    ///
+    /// By default, the same algorithms are used as were used to compute the existing manifests.
+    /// If algorithms are specified here, then only the specified algorithms will be used, and
+    /// the algorithms used by the existing manifests will be ignored.
+    #[clap(
+        arg_enum,
+        short = 'a',
+        long,
+        value_name = "ALGORITHM",
+        ignore_case = true,
+        multiple_occurrences = true
+    )]
+    pub digest_algorithm: Vec<DigestAlgorithm>,
+
+    /// Value of the Bagging-Date tag in bag-info.txt
+    ///
+    /// Defaults to the current date. Should be in YYYY-MM-DD format.
+    #[clap(long, value_name = "YYYY-MM-DD")]
+    pub bagging_date: Option<String>,
+
+    /// Value of the Bag-Software-Agent tag in bag-info.txt
+    ///
+    /// Defaults to this bagr version
+    #[clap(long, value_name = "AGENT")]
+    pub software_agent: Option<String>,
 }
 
 #[derive(ArgEnum, Debug, Clone, Copy)]
@@ -195,79 +222,70 @@ fn main() {
         args.no_styles = true;
     }
 
-    // TODO
     match args.command {
-        Command::Bag(sub_args) => {
-            if let Err(e) = bag_cmd(sub_args) {
+        Command::Bag(cmd) => {
+            if let Err(e) = exec_bag(cmd) {
                 error!("Failed to create bag: {}", e);
                 exit(1);
             }
         }
-        Command::Rebag(sub_args) => match open_bag(defaulted_path(sub_args.bag_path)) {
-            Ok(bag) => {
-                info!("Opened bag: {:?}", bag);
-
-                if let Err(e) = bag.update().finalize() {
-                    error!("Failed to rebag: {}", e);
-                    exit(1);
-                }
-            }
-            Err(e) => {
+        Command::Rebag(cmd) => {
+            if let Err(e) = exec_rebag(cmd) {
                 error!("Failed to rebag: {}", e);
                 exit(1);
             }
-        },
+        }
     }
 }
 
-fn bag_cmd(sub_args: BagCmd) -> Result<Bag> {
+fn exec_bag(cmd: BagCmd) -> Result<Bag> {
     let mut bag_info = BagInfo::new();
 
-    if let Some(date) = sub_args.bagging_date {
+    if let Some(date) = cmd.bagging_date {
         bag_info.add_bagging_date(date)?;
     }
-    if let Some(agent) = sub_args.software_agent {
+    if let Some(agent) = cmd.software_agent {
         bag_info.add_software_agent(agent)?;
     }
-    if let Some(group_id) = sub_args.bag_group_identifier {
+    if let Some(group_id) = cmd.bag_group_identifier {
         bag_info.add_bag_group_identifier(group_id)?;
     }
-    if let Some(count) = sub_args.bag_count {
+    if let Some(count) = cmd.bag_count {
         bag_info.add_bag_count(count)?;
     }
-    if let Some(size) = sub_args.bag_size {
+    if let Some(size) = cmd.bag_size {
         bag_info.add_bag_size(size)?;
     }
 
-    for org in sub_args.source_organization {
+    for org in cmd.source_organization {
         bag_info.add_source_organization(org)?;
     }
-    for address in sub_args.organization_address {
+    for address in cmd.organization_address {
         bag_info.add_organization_address(address)?;
     }
-    for name in sub_args.contact_name {
+    for name in cmd.contact_name {
         bag_info.add_contact_name(name)?;
     }
-    for phone in sub_args.contact_phone {
+    for phone in cmd.contact_phone {
         bag_info.add_contact_phone(phone)?;
     }
-    for email in sub_args.contact_email {
+    for email in cmd.contact_email {
         bag_info.add_contact_email(email)?;
     }
-    for desc in sub_args.external_description {
+    for desc in cmd.external_description {
         bag_info.add_external_description(desc)?;
     }
-    for id in sub_args.external_identifier {
+    for id in cmd.external_identifier {
         bag_info.add_external_identifier(id)?;
     }
-    for desc in sub_args.internal_sender_description {
+    for desc in cmd.internal_sender_description {
         bag_info.add_internal_sender_description(desc)?;
     }
-    for id in sub_args.internal_sender_identifier {
+    for id in cmd.internal_sender_identifier {
         bag_info.add_internal_sender_identifier(id)?;
     }
 
-    for tag in sub_args.tag {
+    for tag in cmd.tag {
         let split = tag.split_once(':').ok_or_else(|| InvalidTagLine {
             details: format!("Label and value must be separated by a ':'. Found: {}", tag),
         })?;
@@ -275,17 +293,33 @@ fn bag_cmd(sub_args: BagCmd) -> Result<Bag> {
     }
 
     create_bag(
-        defaulted_path(sub_args.source),
-        defaulted_path(sub_args.destination),
+        defaulted_path(cmd.source),
+        defaulted_path(cmd.destination),
         bag_info,
-        &sub_args
-            .digest_algorithm
-            .into_iter()
-            .map(|e| e.into())
-            .collect::<Vec<BagItDigestAlgorithm>>(),
+        &map_algorithms(&cmd.digest_algorithm),
     )
+}
+
+fn exec_rebag(cmd: RebagCmd) -> Result<Bag> {
+    let bag = open_bag(defaulted_path(cmd.bag_path))?;
+    info!("Opened bag: {:?}", bag);
+
+    // TODO add option for not recalculating payload manifests
+
+    bag.update()
+        .with_bagging_date(cmd.bagging_date)
+        .with_software_agent(cmd.software_agent)
+        .with_algorithms(&map_algorithms(&cmd.digest_algorithm))
+        .finalize()
 }
 
 fn defaulted_path(path: Option<PathBuf>) -> PathBuf {
     path.unwrap_or_else(|| PathBuf::from("."))
+}
+
+fn map_algorithms(algorithms: &[DigestAlgorithm]) -> Vec<BagItDigestAlgorithm> {
+    algorithms
+        .iter()
+        .map(|e| (*e).into())
+        .collect::<Vec<BagItDigestAlgorithm>>()
 }

@@ -41,6 +41,9 @@ pub struct Bag {
 pub struct BagUpdater {
     bag: Bag,
     recalculate_payload_manifests: bool,
+    algorithms: Vec<DigestAlgorithm>,
+    bagging_date: Option<String>,
+    software_agent: Option<String>,
 }
 
 #[derive(Debug)]
@@ -182,7 +185,14 @@ impl Bag {
         }
     }
 
-    // TODO get tags
+    pub fn declaration(&self) -> &BagDeclaration {
+        &self.declaration
+    }
+
+    pub fn bag_info(&self) -> &BagInfo {
+        &self.bag_info
+    }
+
     // TODO get fetch entries
     // TODO download fetch entries
 
@@ -197,12 +207,37 @@ impl BagUpdater {
         Self {
             bag,
             recalculate_payload_manifests: true,
+            algorithms: Vec::new(),
+            bagging_date: None,
+            software_agent: None,
         }
     }
 
-    // TODO add algorithm
-    // TODO modify tags
-    // TODO add fetch item
+    /// Adds a digest algorithm to use for calculating manifests
+    pub fn with_algorithm(mut self, algorithm: DigestAlgorithm) -> Self {
+        self.algorithms.push(algorithm);
+        self
+    }
+
+    /// Sets the algorithms to use when calculating manifests. An empty slice will result in
+    /// the algorithms that were used to calculate the existing manifests to be used.
+    pub fn with_algorithms(mut self, algorithms: &[DigestAlgorithm]) -> Self {
+        self.algorithms.clear();
+        self.algorithms.extend_from_slice(algorithms);
+        self
+    }
+
+    /// Sets the Bagging-Date to add to bag-info.txt. None for the default value.
+    pub fn with_bagging_date(mut self, bagging_date: Option<String>) -> Self {
+        self.bagging_date = bagging_date;
+        self
+    }
+
+    /// Sets the Bag-Software-Agent to add to bag-info.txt. None for the default value.
+    pub fn with_software_agent(mut self, software_agent: Option<String>) -> Self {
+        self.software_agent = software_agent;
+        self
+    }
 
     /// Enables/disables payload manifest recalculation on `finalize()`. This is enabled by default,
     /// but can be disabled if the digest algorithms in use have not changed and there were no
@@ -215,14 +250,20 @@ impl BagUpdater {
     /// Writes the changes to disk and recalculates manifests.
     pub fn finalize(mut self) -> Result<Bag> {
         let base_dir = &self.bag.base_dir;
-        let algorithms = &self.bag.algorithms;
+        let algorithms = if self.algorithms.is_empty() {
+            &self.bag.algorithms
+        } else {
+            self.algorithms.sort();
+            self.algorithms.dedup();
+            &self.algorithms
+        };
 
-        // TODO should updating these values keep the original position?
-        // TODO need an option of overriding this
-        self.bag.bag_info.add_bagging_date(current_date_str())?;
         self.bag
             .bag_info
-            .add_software_agent(bagr_software_agent())?;
+            .add_bagging_date(self.bagging_date.unwrap_or_else(current_date_str))?;
+        self.bag
+            .bag_info
+            .add_software_agent(self.software_agent.unwrap_or_else(bagr_software_agent))?;
 
         if self.recalculate_payload_manifests {
             delete_payload_manifests(base_dir)?;

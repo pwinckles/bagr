@@ -1,0 +1,4 @@
+Custom-Tag: some value
+Bagging-Date: 2022-02-17
+Bag-Software-Agent: bagr v0.1.0 <https://github.com/pwinckles/bagr>
+Payload-Oxum: 32.3
