@@ -1,0 +1,5 @@
+fs.sandbox = true
+fs.base = "only-tag-changes.in"
+
+bin.name = "bagr"
+args = "rebag --only-tags --bagging-date 2022-02-17"

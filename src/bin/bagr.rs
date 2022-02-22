@@ -148,6 +148,12 @@ pub struct RebagCmd {
     #[clap(short, long, value_name = "BAG_PATH")]
     pub bag_path: Option<PathBuf>,
 
+    /// Only recalculate tag manifests; leave payload manifests alone
+    ///
+    /// When this option is used digest algorithms cannot be specified
+    #[clap(long, conflicts_with = "digest-algorithm")]
+    pub only_tags: bool,
+
     /// Digest algorithms to use when creating manifest files.
     ///
     /// By default, the same algorithms are used as were used to compute the existing manifests.
@@ -304,9 +310,8 @@ fn exec_rebag(cmd: RebagCmd) -> Result<Bag> {
     let bag = open_bag(defaulted_path(cmd.bag_path))?;
     info!("Opened bag: {:?}", bag);
 
-    // TODO add option for not recalculating payload manifests
-
     bag.update()
+        .recalculate_payload_manifests(!cmd.only_tags)
         .with_bagging_date(cmd.bagging_date)
         .with_software_agent(cmd.software_agent)
         .with_algorithms(&map_algorithms(&cmd.digest_algorithm))

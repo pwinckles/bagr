@@ -250,7 +250,9 @@ impl BagUpdater {
     /// Writes the changes to disk and recalculates manifests.
     pub fn finalize(mut self) -> Result<Bag> {
         let base_dir = &self.bag.base_dir;
-        let algorithms = if self.algorithms.is_empty() {
+
+        let algorithms = if !self.recalculate_payload_manifests || self.algorithms.is_empty() {
+            // must reuse same algorithms if payload manifests are not recalculated
             &self.bag.algorithms
         } else {
             self.algorithms.sort();
