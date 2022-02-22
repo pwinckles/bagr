@@ -134,6 +134,10 @@ pub struct BagCmd {
     #[clap(long, value_name = "INT_SENDER_DESC", multiple_occurrences = true)]
     pub internal_sender_description: Vec<String>,
 
+    /// Value of the BagIt-Profile-Identifier tag in bag-info.txt. Maybe repeated.
+    #[clap(long, value_name = "PROFILE_ID", multiple_occurrences = true)]
+    pub bagit_profile_identifier: Vec<String>,
+
     /// A custom tag to add to bag-info.txt. Tags must be formatted as LABEL:VALUE
     #[clap(short, long, value_name = "LABEL:VALUE", multiple_occurrences = true)]
     pub tag: Vec<String>,
@@ -289,6 +293,9 @@ fn exec_bag(cmd: BagCmd) -> Result<Bag> {
     }
     for id in cmd.internal_sender_identifier {
         bag_info.add_internal_sender_identifier(id)?;
+    }
+    for profile in cmd.bagit_profile_identifier {
+        bag_info.add_bagit_profile_identifier(profile)?;
     }
 
     for tag in cmd.tag {

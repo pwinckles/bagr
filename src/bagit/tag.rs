@@ -294,6 +294,14 @@ impl BagInfo {
         self.get_tags(LABEL_INTERNAL_SENDER_DESCRIPTION)
     }
 
+    pub fn add_bagit_profile_identifier<S: AsRef<str>>(&mut self, value: S) -> Result<()> {
+        self.add_repeatable(LABEL_BAGIT_PROFILE_IDENTIFIER, value)
+    }
+
+    pub fn bagit_profile_identifier(&self) -> Box<dyn Iterator<Item = &Tag> + '_> {
+        self.get_tags(LABEL_BAGIT_PROFILE_IDENTIFIER)
+    }
+
     /// Adds a new tag by first removing all existing tags with the same label.
     fn add_non_repeatable<L: AsRef<str>, S: AsRef<str>>(
         &mut self,

@@ -54,10 +54,11 @@ pub const LABEL_BAG_GROUP_IDENTIFIER: &str = "Bag-Group-Identifier";
 pub const LABEL_BAG_COUNT: &str = "Bag-Count";
 pub const LABEL_INTERNAL_SENDER_IDENTIFIER: &str = "Internal-Sender-Identifier";
 pub const LABEL_INTERNAL_SENDER_DESCRIPTION: &str = "Internal-Sender-Description";
+pub const LABEL_BAGIT_PROFILE_IDENTIFIER: &str = "BagIt-Profile-Identifier";
 
 /// Lookup table that indicates if a reserved bag-info label is repeatable. All label names are
 /// lowercased here.
-pub const LABEL_REPEATABLE: [(&str, bool); 15] = [
+pub const LABEL_REPEATABLE: [(&str, bool); 16] = [
     ("bagging-date", false),
     ("payload-oxum", false),
     ("bag-software-agent", false),
@@ -73,4 +74,5 @@ pub const LABEL_REPEATABLE: [(&str, bool); 15] = [
     ("bag-count", false),
     ("internal-sender-identifier", true),
     ("internal-sender-description", true),
+    ("bagit-profile-identifier", true),
 ];

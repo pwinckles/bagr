@@ -27,6 +27,8 @@ bag \
 --internal-sender-identifier int-id2 \
 --internal-sender-description int-desc-1 \
 --internal-sender-description int-desc-2 \
+--bagit-profile-identifier file://profile1.json \
+--bagit-profile-identifier file://profile2.json \
 --tag custom-1:value-1 \
 --tag custom-2:value-2 \
 --tag custom-2:value-3"""
