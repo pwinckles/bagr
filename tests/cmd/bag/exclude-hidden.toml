@@ -1,0 +1,5 @@
+fs.sandbox = true
+fs.base = "hidden.in"
+
+bin.name = "bagr"
+args = "bag --bagging-date 2022-02-16 --exclude-hidden-files"

@@ -74,6 +74,13 @@ pub struct BagCmd {
     )]
     pub digest_algorithm: Vec<DigestAlgorithm>,
 
+    /// Hidden files, files that begin with a '.', in the bag source are not included in the bag.
+    ///
+    /// This is particularly useful for pruning .DS_Store files. Note, if this option is used
+    /// when creating a bag in place, then all hidden files will be **deleted**.
+    #[clap(long)]
+    pub exclude_hidden_files: bool,
+
     /// Value of the Bagging-Date tag in bag-info.txt
     ///
     /// Defaults to the current date. Should be in YYYY-MM-DD format.
@@ -310,6 +317,7 @@ fn exec_bag(cmd: BagCmd) -> Result<Bag> {
         defaulted_path(cmd.destination),
         bag_info,
         &map_algorithms(&cmd.digest_algorithm),
+        !cmd.exclude_hidden_files,
     )
 }
 

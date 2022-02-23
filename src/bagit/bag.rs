@@ -1,5 +1,6 @@
 use chrono::Local;
 use std::collections::HashMap;
+use std::ffi::OsStr;
 use std::fmt::{Display, Formatter};
 use std::fs::File;
 use std::io::Write;
@@ -65,11 +66,16 @@ struct FileMeta {
 ///
 /// The `algorithms` are the algorithms that are used when calculating file digests. If none are
 /// provided, then `sha512` is used.
+///
+/// When `include_hidden_files` is false, hidden files, files beginning with a `.`, will **not**
+/// be included in the bag. If the bag is being created in place, this further means that hidden
+/// files and directories will be **deleted**.
 pub fn create_bag<S: AsRef<Path>, D: AsRef<Path>>(
     src_dir: S,
     dst_dir: D,
     mut bag_info: BagInfo,
     algorithms: &[DigestAlgorithm],
+    include_hidden_files: bool,
 ) -> Result<Bag> {
     let src_dir = src_dir.as_ref();
     let dst_dir = dst_dir.as_ref();
@@ -88,9 +94,20 @@ pub fn create_bag<S: AsRef<Path>, D: AsRef<Path>>(
 
     fs::create_dir(&temp_dir).context(IoCreateSnafu { path: &temp_dir })?;
 
-    let mut payload_meta = move_into_dir(!in_place, &src_dir, &temp_dir, &algorithms, |f| {
-        f.file_name() != temp_name.as_str()
-    })?;
+    let mut payload_meta = move_into_dir(
+        !in_place,
+        &src_dir,
+        &temp_dir,
+        &algorithms,
+        include_hidden_files,
+        |f| {
+            // Excludes the temp directory we're moving files into as well as hidden files
+            // when hidden files are not to be included in the bag and the bag is not being
+            // created in place.
+            f.file_name() != temp_name.as_str()
+                && !(!include_hidden_files && !in_place && is_hidden_file(f.file_name()))
+        },
+    )?;
 
     let data_dir = dst_dir.join(DATA);
     rename(temp_dir, &data_dir)?;
@@ -291,6 +308,7 @@ fn move_into_dir<S, D, P>(
     src_dir: S,
     dst_dir: D,
     algorithms: &[DigestAlgorithm],
+    include_hidden_files: bool,
     predicate: P,
 ) -> Result<Vec<FileMeta>>
 where
@@ -306,6 +324,20 @@ where
 
     for file in WalkDir::new(src_dir).into_iter().filter_entry(predicate) {
         let file = file.context(WalkFileSnafu {})?;
+
+        if !include_hidden_files && is_hidden_file(file.file_name()) {
+            info!("Deleting hidden file {}", file.path().display());
+            if file.file_type().is_dir() {
+                fs::remove_dir_all(file.path()).context(IoDeleteSnafu {
+                    path: file.path().to_path_buf(),
+                })?;
+            } else {
+                fs::remove_file(file.path()).context(IoDeleteSnafu {
+                    path: file.path().to_path_buf(),
+                })?;
+            }
+            continue;
+        }
 
         if file.file_type().is_file() {
             let metadata = file.metadata().context(WalkFileSnafu {})?;
@@ -613,4 +645,10 @@ fn epoch_seconds() -> u64 {
         .duration_since(UNIX_EPOCH)
         .expect("Failed to get system time")
         .as_secs()
+}
+
+fn is_hidden_file(name: &OsStr) -> bool {
+    name.to_str()
+        .map(|name| name.starts_with('.') && name != "." && name != "..")
+        .unwrap_or(false)
 }
