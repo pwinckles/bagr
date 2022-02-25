@@ -1,4 +1,5 @@
 use chrono::Local;
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::fmt::{Display, Formatter};
@@ -510,11 +511,11 @@ fn write_manifests<P: AsRef<Path>>(
     file_meta.sort_by(|a, b| a.path.cmp(&b.path));
 
     for meta in file_meta {
-        // TODO on windows, `\` must be converted to `/`
         let path = meta.path.to_str().ok_or_else(|| InvalidUtf8Path {
             path: meta.path.to_path_buf(),
         })?;
         let encoded = percent_encode(path);
+        let normalized = convert_path_separator(encoded.as_ref());
 
         for algorithm in algorithms {
             let digest = meta
@@ -524,7 +525,7 @@ fn write_manifests<P: AsRef<Path>>(
             let manifest = manifests
                 .get_mut(algorithm)
                 .expect("Missing expected file digest");
-            writeln!(manifest, "{digest}  {encoded}").context(IoGeneralSnafu {})?;
+            writeln!(manifest, "{digest}  {normalized}").context(IoGeneralSnafu {})?;
         }
     }
 
@@ -651,4 +652,18 @@ fn is_hidden_file(name: &OsStr) -> bool {
     name.to_str()
         .map(|name| name.starts_with('.') && name != "." && name != "..")
         .unwrap_or(false)
+}
+
+#[cfg(target_os = "windows")]
+fn convert_path_separator(path: &str) -> Cow<str> {
+    if path.contains('\\') {
+        Cow::Owned(path.replace('\\', "/"))
+    } else {
+        path.into()
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn convert_path_separator(path: &str) -> Cow<str> {
+    path.into()
 }
