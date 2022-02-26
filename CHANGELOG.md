@@ -10,6 +10,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased] - ReleaseDate
 
+## [0.2.0] - 2022-02-26
+
 ### Added
 
 - Initial release
@@ -17,4 +19,5 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Support for updating the manifests in existing bags
 
 <!-- next-url -->
-[Unreleased]: https://github.com/pwinckles/bagr/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/pwinckles/bagr/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/pwinckles/bagr/compare/v0.1.0...v0.2.0
