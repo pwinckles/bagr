@@ -49,6 +49,32 @@ pub struct BagUpdater {
 }
 
 #[derive(Debug)]
+pub struct ValidationResult {
+    verdict: ValidationVerdict,
+    issues: Vec<ValidationIssue>,
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum ValidationVerdict {
+    Valid,
+    Invalid,
+    Complete,
+    Incomplete,
+}
+
+#[derive(Debug)]
+pub struct ValidationIssue {
+    level: IssueLevel,
+    message: String,
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum IssueLevel {
+    Error,
+    Warn,
+}
+
+#[derive(Debug)]
 struct FileMeta {
     path: PathBuf,
     size_bytes: u64,
@@ -146,6 +172,57 @@ pub fn open_bag<P: AsRef<Path>>(base_dir: P) -> Result<Bag> {
     let bag_info = read_bag_info(base_dir)?;
 
     Ok(Bag::new(base_dir, declaration, bag_info, algorithms))
+}
+
+/// Validates the bag at the specified path. If `integrity_check` is `true` then the checksums of
+/// all of the files in the bag will be verified. Otherwise, the bag is only evaluated based on
+/// whether it is complete.
+pub fn validate_bag<P: AsRef<Path>>(
+    base_dir: P,
+    integrity_check: bool,
+) -> Result<ValidationResult> {
+    // TODO from the rfc
+    // A _complete_ bag MUST meet the following requirements:
+    //     1.  Every required element MUST be present (see Section 2.1).
+    //         a. bagit.txt
+    //            1. BagIt-Version
+    //            2. Tag-File-Character-Encoding
+    //         b. data dir
+    //         c. 1+ payload manifest
+    //            1. valid algorithm
+    //            2. contain every file in payload
+    //            3. not reference files outside of payload
+    //            4. not reference directories
+    //            5. valid line format
+    //            6. MAY start with ./
+    //     2.  Every file listed in every tag manifest MUST be present.
+    //         a. not reference files outside of bag
+    //         b. not reference payload files
+    //         c. not reference tag manifests
+    //         d. MUST reference payload manifests
+    //         e. SHOULD reference other tag files
+    //         f. all tag manifests SHOULD list same files
+    //         g. all algorithms SHOULD be the same as payload manifests
+    //     3.  Every file listed in every payload manifest MUST be present.
+    //     4.  For BagIt 1.0, every payload file MUST be listed in every payload
+    //         manifest.  Note that older versions of BagIt allowed payload
+    //         files to be listed in just one of the manifests.
+    //     5.  Every element present MUST conform to BagIt 1.0.
+    //         a. bag-info.txt
+    //            1. valid lines
+    //            2. warnings based on reserved labels
+    //         b. fetch.txt
+    //            1. valid lines
+    //            2. files listed must be in payload manifest
+    //            3. not reference tag files
+    //
+    // A _valid_ bag MUST meet the following requirements:
+    //     1.  The bag MUST be _complete_.
+    //     2.  Every checksum in every payload manifest and tag manifest has
+    //         been successfully verified against the contents of the
+    //         corresponding file.
+
+    Ok(ValidationResult::new(ValidationVerdict::Valid))
 }
 
 impl BagItVersion {
@@ -299,6 +376,15 @@ impl BagUpdater {
         update_tag_manifests(base_dir, algorithms)?;
 
         Ok(self.bag)
+    }
+}
+
+impl ValidationResult {
+    pub fn new(verdict: ValidationVerdict) -> Self {
+        Self {
+            verdict,
+            issues: Vec::new(),
+        }
     }
 }
 

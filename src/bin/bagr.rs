@@ -6,7 +6,8 @@ use log::{error, info, LevelFilter};
 
 use bagr::bagit::Error::InvalidTagLine;
 use bagr::bagit::{
-    create_bag, open_bag, Bag, BagInfo, DigestAlgorithm as BagItDigestAlgorithm, Result,
+    create_bag, open_bag, validate_bag, Bag, BagInfo, DigestAlgorithm as BagItDigestAlgorithm,
+    Result,
 };
 
 // TODO expand docs
@@ -40,6 +41,8 @@ pub enum Command {
     Bag(BagCmd),
     #[clap(name = "rebag")]
     Rebag(RebagCmd),
+    #[clap(name = "validate")]
+    Validate(ValidateCmd),
 }
 
 /// Create a new bag
@@ -191,6 +194,20 @@ pub struct RebagCmd {
     pub software_agent: Option<String>,
 }
 
+/// Validate the contents of a bag
+#[derive(Args, Debug)]
+pub struct ValidateCmd {
+    /// Absolute or relative path to the bag's base directory
+    ///
+    /// By default, this is the current directory.
+    #[clap(short, long, value_name = "BAG_PATH")]
+    pub bag_path: Option<PathBuf>,
+
+    /// Validate the bag is complete without validating integrity
+    #[clap(short = 'c', long)]
+    pub only_complete: bool,
+}
+
 #[derive(ArgEnum, Debug, Clone, Copy)]
 pub enum DigestAlgorithm {
     Md5,
@@ -247,6 +264,12 @@ fn main() {
         Command::Rebag(cmd) => {
             if let Err(e) = exec_rebag(cmd) {
                 error!("Failed to rebag: {}", e);
+                exit(1);
+            }
+        }
+        Command::Validate(cmd) => {
+            if let Err(e) = exec_validate(cmd) {
+                error!("Failed to validate: {}", e);
                 exit(1);
             }
         }
@@ -329,6 +352,14 @@ fn exec_rebag(cmd: RebagCmd) -> Result<Bag> {
         .with_software_agent(cmd.software_agent)
         .with_algorithms(&map_algorithms(&cmd.digest_algorithm))
         .finalize()
+}
+
+fn exec_validate(cmd: ValidateCmd) -> Result<()> {
+    let _result = validate_bag(defaulted_path(cmd.bag_path), !cmd.only_complete)?;
+
+    // TODO display results
+
+    Ok(())
 }
 
 fn defaulted_path(path: Option<PathBuf>) -> PathBuf {
