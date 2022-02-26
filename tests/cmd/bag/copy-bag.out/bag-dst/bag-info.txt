@@ -1,3 +1,3 @@
 Bagging-Date: 2022-02-16
-Bag-Software-Agent: bagr v0.2.0 <https://github.com/pwinckles/bagr>
+Bag-Software-Agent: bagr v0.3.0-dev <https://github.com/pwinckles/bagr>
 Payload-Oxum: 14.2
