@@ -2,4 +2,4 @@ Payload-Oxum: 14.2
 New-Tag: here
 Another-Tag: there
 Bagging-Date: 2022-02-17
-Bag-Software-Agent: bagr v0.1.0 <https://github.com/pwinckles/bagr>
+Bag-Software-Agent: bagr v0.2.0-dev <https://github.com/pwinckles/bagr>

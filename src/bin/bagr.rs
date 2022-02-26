@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 use std::process::exit;
 
-use clap::AppSettings::UseLongFormatForHelpSubcommand;
 use clap::{ArgEnum, Args, Parser, Subcommand};
 use log::{error, info, LevelFilter};
 
@@ -15,7 +14,6 @@ use bagr::bagit::{
 /// A CLI for interacting with BagIt bags
 #[derive(Debug, Parser)]
 #[clap(name = "bagr", author = "Peter Winckles <pwinckles@pm.me>", version)]
-#[clap(setting(UseLongFormatForHelpSubcommand))]
 pub struct BagrArgs {
     /// Suppress error messages and other command specific logging
     #[clap(short, long)]

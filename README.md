@@ -8,13 +8,20 @@ complete.
 
 ## Install
 
-I have not made a release yet. Until I do, `bagr` must be compiled
-from source by clone this project and executing the following within
-the project root:
+### Pre-built
 
-``` shell
-cargo install --path .
-```
+The [releases page](https://github.com/pwinckles/bagr/releases) has
+pre-built binaries that should work on common OSes and architectures.
+You do _not_ need to install Rust to use them.
+
+1. Download and unzip the appropriate binary
+2. Execute `./bagr help` to verify it works
+
+### Local Build
+
+1. Install [Rust](https://www.rust-lang.org/tools/install)
+2. Execute: `cargo install bagr`
+3. Verify the install: `bagr help`
 
 ## Usage
 
@@ -65,8 +72,7 @@ by specifying the `--digest-algorithm` option.
 ## Roadmap
 
 1. Implement bag validation
-2. Release v1.0.0
-3. Support `fetch.txt`
-4. Support BagIt 0.97
-5. Support BagIt Profiles
-6. Support non-UTF-8 character encodings
+2. Support `fetch.txt`
+3. Support BagIt 0.97
+4. Support BagIt Profiles
+5. Support non-UTF-8 character encodings
