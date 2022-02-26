@@ -1,3 +1,6 @@
 /target
 /.idea
 /dump
+
+/tests/cmd/bag/manifest-encoding.in/
+/tests/cmd/bag/manifest-encoding.out/data/
