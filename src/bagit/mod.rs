@@ -10,3 +10,4 @@ mod encoding;
 mod error;
 mod io;
 mod tag;
+mod validate;

@@ -204,8 +204,8 @@ pub struct ValidateCmd {
     pub bag_path: Option<PathBuf>,
 
     /// Validate the bag is complete without validating integrity
-    #[clap(short = 'c', long)]
-    pub only_complete: bool,
+    #[clap(short, long)]
+    pub complete: bool,
 }
 
 #[derive(ArgEnum, Debug, Clone, Copy)]
@@ -355,7 +355,7 @@ fn exec_rebag(cmd: RebagCmd) -> Result<Bag> {
 }
 
 fn exec_validate(cmd: ValidateCmd) -> Result<()> {
-    let _result = validate_bag(defaulted_path(cmd.bag_path), !cmd.only_complete)?;
+    let _result = validate_bag(defaulted_path(cmd.bag_path), !cmd.complete)?;
 
     // TODO display results
 
