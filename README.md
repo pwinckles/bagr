@@ -31,14 +31,14 @@ By default, `bagr` will turn the contents of the current directory
 into a bag by invoking:
 
 ``` shell
-bagr bag
+bagr bag .
 ```
 
 If instead, you'd like to create a bag by _copying_ the contents of a
 source directory into a destination bag, then you can do by invoking:
 
 ``` shell
-bagr bag --source src/dir --destination dst/bag
+bagr bag src/dir dst/bag
 ```
 
 By default, `sha512` is used; this algorithm can be changed using the

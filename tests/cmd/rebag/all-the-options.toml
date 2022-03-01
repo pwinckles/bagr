@@ -3,7 +3,7 @@ fs.base = "basic-rebag.in"
 
 bin.name = "bagr"
 args = """
-rebag \
+rebag . \
 --bagging-date 2022-02-17 \
 --software-agent different-agent \
 --digest-algorithm md5 \

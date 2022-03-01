@@ -10,6 +10,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased] - ReleaseDate
 
+### Changed
+
+- Source and destination directories are now specified via position
+  parameters rather than options
+
 ## [0.2.0] - 2022-02-26
 
 ### Added
