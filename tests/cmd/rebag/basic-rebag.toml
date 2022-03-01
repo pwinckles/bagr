@@ -2,4 +2,4 @@ fs.sandbox = true
 fs.base = "basic-rebag.in"
 
 bin.name = "bagr"
-args = "rebag --bagging-date 2022-02-17"
+args = "rebag . --bagging-date 2022-02-17"

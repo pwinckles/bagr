@@ -3,7 +3,7 @@ fs.base = "basic-bag.in"
 
 bin.name = "bagr"
 args = """
-bag \
+bag . \
 --bagging-date 2022-02-16 \
 --software-agent custom-agent \
 --bag-size 2MB \

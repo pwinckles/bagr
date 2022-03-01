@@ -23,11 +23,6 @@ pub struct BagrArgs {
     #[clap(short = 'V', long)]
     pub verbose: bool,
 
-    // TODO this might not be needed
-    /// Disable all output styling
-    #[clap(short = 'S', long)]
-    pub no_styles: bool,
-
     /// Subcommand to execute
     #[clap(subcommand)]
     pub command: Command,
@@ -45,18 +40,19 @@ pub enum Command {
 /// Create a new bag
 #[derive(Args, Debug)]
 pub struct BagCmd {
-    /// Absolute or relative path to the new bag's base directory
-    ///
-    /// By default, this is the current directory.
-    #[clap(short, long, value_name = "DST_DIR")]
-    pub destination: Option<PathBuf>,
-
     /// Absolute or relative path to the directory containing the files to add to the bag
     ///
-    /// Specify this option to create a bag by copying files from a directory into a bag in
-    /// a different directory. By default, bags are created in place.
-    #[clap(short, long, value_name = "SRC_DIR")]
-    pub source: Option<PathBuf>,
+    /// If a destination is not also specified, then the bag will be created in place.
+    #[clap(value_name = "SRC_DIR")]
+    pub source: PathBuf,
+
+    /// Absolute or relative path to the new bag's base directory
+    ///
+    /// When this is specified, then the files in the source directory are copied into the bag.
+    /// When this is not specified, then the source and destination are the same and the bag is
+    /// created in place.
+    #[clap(value_name = "DST_DIR")]
+    pub destination: Option<PathBuf>,
 
     /// Digest algorithms to use when creating manifest files.
     ///
@@ -152,10 +148,8 @@ pub struct BagCmd {
 #[derive(Args, Debug)]
 pub struct RebagCmd {
     /// Absolute or relative path to the bag's base directory
-    ///
-    /// By default, this is the current directory.
-    #[clap(short, long, value_name = "BAG_PATH")]
-    pub bag_path: Option<PathBuf>,
+    #[clap(value_name = "BAG_PATH")]
+    pub bag_path: PathBuf,
 
     /// Only recalculate tag manifests; leave payload manifests alone
     ///
@@ -215,7 +209,7 @@ impl From<DigestAlgorithm> for BagItDigestAlgorithm {
 }
 
 fn main() {
-    let mut args = BagrArgs::parse();
+    let args = BagrArgs::parse();
 
     let log_level = if args.quiet {
         LevelFilter::Off
@@ -231,11 +225,6 @@ fn main() {
         .format_module_path(false)
         .format_target(false)
         .init();
-
-    // If the output is being piped then we should disable styling
-    if atty::isnt(atty::Stream::Stdout) {
-        args.no_styles = true;
-    }
 
     match args.command {
         Command::Bag(cmd) => {
@@ -311,8 +300,8 @@ fn exec_bag(cmd: BagCmd) -> Result<Bag> {
     }
 
     create_bag(
-        defaulted_path(cmd.source),
-        defaulted_path(cmd.destination),
+        cmd.source.clone(),
+        cmd.destination.unwrap_or(cmd.source),
         bag_info,
         &map_algorithms(&cmd.digest_algorithm),
         !cmd.exclude_hidden_files,
@@ -320,7 +309,7 @@ fn exec_bag(cmd: BagCmd) -> Result<Bag> {
 }
 
 fn exec_rebag(cmd: RebagCmd) -> Result<Bag> {
-    let bag = open_bag(defaulted_path(cmd.bag_path))?;
+    let bag = open_bag(cmd.bag_path)?;
     info!("Opened bag: {:?}", bag);
 
     bag.update()
@@ -329,10 +318,6 @@ fn exec_rebag(cmd: RebagCmd) -> Result<Bag> {
         .with_software_agent(cmd.software_agent)
         .with_algorithms(&map_algorithms(&cmd.digest_algorithm))
         .finalize()
-}
-
-fn defaulted_path(path: Option<PathBuf>) -> PathBuf {
-    path.unwrap_or_else(|| PathBuf::from("."))
 }
 
 fn map_algorithms(algorithms: &[DigestAlgorithm]) -> Vec<BagItDigestAlgorithm> {
