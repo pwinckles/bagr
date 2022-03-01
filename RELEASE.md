@@ -12,6 +12,7 @@ cargo release --no-tag --no-push --no-publish --execute
 TRYCMD=overwrite cargo test
 
 # Fix up the release commit
+git add .
 git commit --amend
 git tag vVERSION
 git push origin main

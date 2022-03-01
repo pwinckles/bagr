@@ -1,6 +1,6 @@
 [package]
 name = "bagr"
-version = "0.3.0"
+version = "0.4.0-dev"
 edition = "2021"
 authors = ["Peter Winckles <pwinckles@pm.me>"]
 description = "A CLI for interacting with BagIt bags"
